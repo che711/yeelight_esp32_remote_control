@@ -19,14 +19,26 @@ String sendCmd(const String &method, const String &params) {
   lastCmd = millis();
 
   WiFiClient c;
-  c.setTimeout(3);  // секунды
+  c.setNoDelay(true);
   if (!c.connect(LAMP_IP, LAMP_PORT, 2000)) {
     Serial.println("lamp: нет соединения (проверьте LAN Control и IP)");
     return "";
   }
   String json = String("{\"id\":") + cmdId++ + ",\"method\":\"" + method + "\",\"params\":" + params + "}";
   c.print(json + "\r\n");  // одним пакетом: лампа сбрасывает соединение, если «\r\n» приходит отдельно
-  String reply = c.readStringUntil('\n');
+  // Ждём ответ до 3 секунд, читаем до конца строки.
+  // Таймаут задан явно: у setTimeout() в разных версиях ядра разные единицы (секунды или миллисекунды).
+  String reply;
+  uint32_t t0 = millis();
+  bool lineDone = false;
+  while (!lineDone && millis() - t0 < 3000 && (c.connected() || c.available())) {
+    while (c.available()) {
+      char ch = (char)c.read();
+      if (ch == '\n') { lineDone = true; break; }
+      if (ch != '\r') reply += ch;
+    }
+    if (!lineDone) delay(5);
+  }
   c.stop();
   Serial.printf("-> %s\n<- %s\n", json.c_str(), reply.c_str());
   if (reply.length() == 0) {

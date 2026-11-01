@@ -24,7 +24,10 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   #hue::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:#fff; border:2px solid #000; }
   #hue::-moz-range-thumb { width:22px; height:22px; border-radius:50%; background:#fff; border:2px solid #000; }
   .sw { width:50px; height:28px; accent-color:var(--accent); transform:scale(1.2); }
-  #swatch { width:100%; height:10px; border-radius:5px; margin-top:6px; }
+  #swatch { width:100%; height:10px; border-radius:5px; margin-top:10px; }
+  #white { margin-top:10px; padding:8px 18px; border:1px solid var(--line); border-radius:8px;
+           background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
+  #white:active { background:var(--accent); color:#000; }
 </style>
 </head>
 <body>
@@ -50,6 +53,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     <input type="range" id="hue" min="0" max="359">
     <div class="row"><span>Насыщенность</span><b id="sat_v"></b></div>
     <input type="range" id="sat" min="0" max="100">
+    <button id="white" type="button">Белый</button>
     <div id="swatch"></div>
   </section>
 </main>
@@ -70,15 +74,42 @@ function setStatus(ok) {
 function updateLabel(id) {
   $(id + '_v').textContent = $(id).value + suffix[id];
   if (id === 'hue' || id === 'sat') {
-    $('swatch').style.background = 'hsl(' + $('hue').value + ' ' + $('sat').value + '% 50%)';
+    $('swatch').style.background = hsvCss(+$('hue').value, +$('sat').value);
   }
 }
 
-// Отправка: пока идёт запрос, новые значения копятся и уходят одним пакетом
+// HSV (яркость 100%) в цвет для полоски-образца; при насыщенности 0 получается белый
+function hsvCss(h, s) {
+  const c = s / 100;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = 1 - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 60)       { r = c; g = x; }
+  else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; }
+  else              { r = c; b = x; }
+  const to255 = v => Math.round((v + m) * 255);
+  return 'rgb(' + to255(r) + ',' + to255(g) + ',' + to255(b) + ')';
+}
+
+// Лампа принимает около 60 команд в минуту, при превышении она замолкает на минуту и дольше.
+// Поэтому запросы уходят не чаще раза в 1,2 с, а при движении ползунка копится последнее значение.
+const MIN_GAP_MS = 1200;
+let lastSent = 0;
+let timer = null;
+
 function queue(params) {
   Object.assign(queued, params);
   lastAction = Date.now();
-  if (!inflight) flush();
+  schedule();
+}
+
+function schedule() {
+  if (inflight || timer) return;
+  const wait = Math.max(0, MIN_GAP_MS - (Date.now() - lastSent));
+  timer = setTimeout(() => { timer = null; flush(); }, wait);
 }
 
 function flush() {
@@ -86,11 +117,15 @@ function flush() {
   const params = queued;
   queued = {};
   inflight = true;
+  lastSent = Date.now();
   fetch('/api/set?' + new URLSearchParams(params))
     .then(r => r.json())
     .then(j => setStatus(j.ok))
     .catch(() => setStatus(false))
-    .finally(() => { inflight = false; flush(); });
+    .finally(() => {
+      inflight = false;
+      if (Object.keys(queued).length) schedule();
+    });
 }
 
 ['bright', 'ct', 'bg_bright'].forEach(id => {
@@ -107,6 +142,12 @@ function flush() {
   });
 });
 
+$('white').addEventListener('click', () => {
+  $('sat').value = 0;
+  updateLabel('sat');
+  queue({ hue: $('hue').value, sat: 0 });
+});
+
 ['power', 'bg_power'].forEach(id => {
   $(id).addEventListener('change', () => {
     queue({ [id]: $(id).checked ? 'on' : 'off' });
@@ -114,7 +155,7 @@ function flush() {
 });
 
 function refresh() {
-  if (Date.now() - lastAction < 2500 || inflight) return;  // не мешаем, пока двигаете ползунок
+  if (Date.now() - lastAction < 5000 || inflight || timer) return;  // не мешаем, пока двигаете ползунок
   fetch('/api/state')
     .then(r => r.json())
     .then(j => {
@@ -132,7 +173,7 @@ function refresh() {
 
 ['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(updateLabel);
 refresh();
-setInterval(refresh, 3000);
+setInterval(refresh, 15000);
 </script>
 </body>
 </html>
