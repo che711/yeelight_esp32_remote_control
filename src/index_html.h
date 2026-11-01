@@ -137,6 +137,12 @@ function flush() {
 
 ['hue', 'sat'].forEach(id => {
   $(id).addEventListener('input', () => {
+    // При насыщенности 0 цвет всегда белый, поэтому ползунок цвета ничего бы не менял.
+    // Если после «Белого» двигают цвет, возвращаем насыщенность на максимум.
+    if (id === 'hue' && +$('sat').value === 0) {
+      $('sat').value = 100;
+      updateLabel('sat');
+    }
     updateLabel(id);
     queue({ hue: $('hue').value, sat: $('sat').value });
   });

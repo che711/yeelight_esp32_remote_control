@@ -19,25 +19,33 @@ String sendCmd(const String &method, const String &params) {
   lastCmd = millis();
 
   WiFiClient c;
-  c.setNoDelay(true);
   if (!c.connect(LAMP_IP, LAMP_PORT, 2000)) {
     Serial.println("lamp: нет соединения (проверьте LAN Control и IP)");
     return "";
   }
-  String json = String("{\"id\":") + cmdId++ + ",\"method\":\"" + method + "\",\"params\":" + params + "}";
+  c.setNoDelay(true);
+  uint32_t id = cmdId++;
+  String idTag = String("\"id\":") + id + ",";
+  String json = String("{\"id\":") + id + ",\"method\":\"" + method + "\",\"params\":" + params + "}";
   c.print(json + "\r\n");  // одним пакетом: лампа сбрасывает соединение, если «\r\n» приходит отдельно
   // Ждём ответ до 3 секунд, читаем до конца строки.
   // Таймаут задан явно: у setTimeout() в разных версиях ядра разные единицы (секунды или миллисекунды).
-  String reply;
+  // Лампа может прислать перед ответом уведомление {"method":"props",...} — такие строки пропускаем
+  // и ждём строку с нашим id.
+  String reply, line;
   uint32_t t0 = millis();
-  bool lineDone = false;
-  while (!lineDone && millis() - t0 < 3000 && (c.connected() || c.available())) {
+  bool got = false;
+  while (!got && millis() - t0 < 3000 && (c.connected() || c.available())) {
     while (c.available()) {
       char ch = (char)c.read();
-      if (ch == '\n') { lineDone = true; break; }
-      if (ch != '\r') reply += ch;
+      if (ch == '\n') {
+        if (line.indexOf(idTag) >= 0) { reply = line; got = true; break; }
+        line = "";
+      } else if (ch != '\r') {
+        line += ch;
+      }
     }
-    if (!lineDone) delay(5);
+    if (!got) delay(5);
   }
   c.stop();
   Serial.printf("-> %s\n<- %s\n", json.c_str(), reply.c_str());
@@ -116,7 +124,12 @@ void handleSet() {
     run("set_ct_abx", "[" + String(v) + ",\"smooth\",150]");
   }
   if (server.hasArg("bg_power")) {
-    run("bg_set_power", String("[\"") + (server.arg("bg_power") == "on" ? "on" : "off") + "\",\"smooth\",300]");
+    if (server.arg("bg_power") == "on") {
+      // Последний параметр 3 — включить сразу в режиме HSV, без «последнего режима» лампы
+      run("bg_set_power", "[\"on\",\"smooth\",300,3]");
+    } else {
+      run("bg_set_power", "[\"off\",\"smooth\",300]");
+    }
   }
   if (server.hasArg("bg_bright")) {
     int v = constrain(server.arg("bg_bright").toInt(), 1, 100);
