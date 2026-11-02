@@ -88,9 +88,10 @@ void handleRoot() {
 
 void handleState() {
   String reply = sendCmd("get_prop",
-      "[\"power\",\"bright\",\"ct\",\"bg_power\",\"bg_bright\",\"bg_hue\",\"bg_sat\"]");
-  String v[7];
-  if (parseResult(reply, v, 7) < 7) {
+      "[\"power\",\"bright\",\"ct\",\"bg_power\",\"bg_bright\",\"bg_hue\",\"bg_sat\",\"bg_flowing\"]");
+  String v[8];
+  int n = parseResult(reply, v, 8);
+  if (n < 7) {
     server.send(200, "application/json", "{\"ok\":false}");
     return;
   }
@@ -102,6 +103,7 @@ void handleState() {
   j += ",\"bg_bright\":" + String(v[4].toInt());
   j += ",\"hue\":" + String(v[5].toInt());
   j += ",\"sat\":" + String(v[6].toInt());
+  j += ",\"bg_flow\":\"" + (n >= 8 ? v[7] : String("")) + "\"";  // "1" — переливается, "0" — нет
   j += "}";
   server.send(200, "application/json", j);
 }
@@ -146,6 +148,26 @@ void handleSet() {
       }
     } else {
       run("bg_set_power", "[\"off\",\"smooth\",300]");
+    }
+  }
+  // Переливание: лампа сама плавно крутит цвета по кругу, плата после запуска ей не нужна.
+  // Запускаем сценой «cf», как и обычное включение подсветки: она заодно включает подсветку.
+  if (server.hasArg("bg_flow")) {
+    if (server.arg("bg_flow") == "on") {
+      int stepMs = constrain(server.arg("flow_ms").toInt(), 500, 30000);  // время смены одного цвета
+      int br = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
+      const unsigned long colors[] = {0xFF0000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF};
+      String flow = "";
+      for (int i = 0; i < 6; i++) {
+        if (i) flow += ",";
+        // длительность, режим 1 (RGB), цвет, яркость
+        flow += String(stepMs) + ",1," + String(colors[i]) + "," + String(br);
+      }
+      // 0 — крутить бесконечно, 1 — после остановки остаться на текущем цвете
+      run("bg_set_scene", "[\"cf\",0,1,\"" + flow + "\"]");
+      bgDone = true;
+    } else {
+      run("bg_stop_cf", "[]");
     }
   }
   if (server.hasArg("bg_bright") && !bgDone) {

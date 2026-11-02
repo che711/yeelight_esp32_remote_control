@@ -49,6 +49,9 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     <label class="row"><span>Включена</span><input type="checkbox" id="bg_power" class="sw"></label>
     <div class="row"><span>Яркость</span><b id="bg_bright_v"></b></div>
     <input type="range" id="bg_bright" min="1" max="100">
+    <label class="row"><span>Переливание</span><input type="checkbox" id="bg_flow" class="sw"></label>
+    <div class="row"><span>Время смены цвета</span><b id="flow_s_v"></b></div>
+    <input type="range" id="flow_s" min="1" max="20" value="3">
     <div class="row"><span>Цвет</span><b id="hue_v"></b></div>
     <input type="range" id="hue" min="0" max="359">
     <div class="row"><span>Насыщенность</span><b id="sat_v"></b></div>
@@ -60,7 +63,8 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
 <script>
 const $ = id => document.getElementById(id);
-const suffix = { bright:'%', ct:' K', bg_bright:'%', hue:'°', sat:'%' };
+const suffix = { bright:'%', ct:' K', bg_bright:'%', hue:'°', sat:'%', flow_s:' с' };
+const FLOW_GRADIENT = 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)';
 let lastAction = 0;
 let inflight = false;
 let queued = {};
@@ -71,11 +75,20 @@ function setStatus(ok) {
   s.className = ok ? '' : 'bad';
 }
 
+function flowOn() { return $('bg_flow').checked; }
+
+// Параметры запуска переливания: цвета лампа крутит сама, нужны только скорость и яркость
+function flowParams() {
+  return { bg_flow: 'on', flow_ms: $('flow_s').value * 1000, bg_bright: $('bg_bright').value };
+}
+
+function updateSwatch() {
+  $('swatch').style.background = flowOn() ? FLOW_GRADIENT : hsvCss(+$('hue').value, +$('sat').value);
+}
+
 function updateLabel(id) {
   $(id + '_v').textContent = $(id).value + suffix[id];
-  if (id === 'hue' || id === 'sat') {
-    $('swatch').style.background = hsvCss(+$('hue').value, +$('sat').value);
-  }
+  if (id === 'hue' || id === 'sat') updateSwatch();
 }
 
 // HSV (яркость 100%) в цвет для полоски-образца; при насыщенности 0 получается белый
@@ -136,15 +149,39 @@ function flush() {
     });
 }
 
-['bright', 'ct', 'bg_bright'].forEach(id => {
+['bright', 'ct'].forEach(id => {
   $(id).addEventListener('input', () => {
     updateLabel(id);
     queue({ [id]: $(id).value });
   });
 });
 
+// Пока переливание включено, яркость меняем, перезапуская его с новой яркостью
+$('bg_bright').addEventListener('input', () => {
+  updateLabel('bg_bright');
+  queue(flowOn() ? flowParams() : { bg_bright: $('bg_bright').value });
+});
+
+$('bg_flow').addEventListener('change', () => {
+  updateSwatch();
+  queue(flowOn() ? flowParams() : { bg_flow: 'off' });
+});
+
+$('flow_s').addEventListener('input', () => {
+  updateLabel('flow_s');
+  if (flowOn()) queue(flowParams());
+});
+
+// Ручной выбор цвета выключает переливание
+function leaveFlow() {
+  const was = flowOn();
+  $('bg_flow').checked = false;
+  return was ? { bg_flow: 'off' } : {};
+}
+
 ['hue', 'sat'].forEach(id => {
   $(id).addEventListener('input', () => {
+    const stop = leaveFlow();
     // При насыщенности 0 цвет всегда белый, поэтому ползунок цвета ничего бы не менял.
     // Если после «Белого» двигают цвет, возвращаем насыщенность на максимум.
     if (id === 'hue' && +$('sat').value === 0) {
@@ -152,28 +189,34 @@ function flush() {
       updateLabel('sat');
     }
     updateLabel(id);
-    queue({ hue: $('hue').value, sat: $('sat').value });
+    queue(Object.assign({ hue: $('hue').value, sat: $('sat').value }, stop));
   });
 });
 
 $('white').addEventListener('click', () => {
+  const stop = leaveFlow();
   $('sat').value = 0;
   updateLabel('sat');
-  queue({ hue: $('hue').value, sat: 0 });
+  queue(Object.assign({ hue: $('hue').value, sat: 0 }, stop));
 });
 
-['power', 'bg_power'].forEach(id => {
-  $(id).addEventListener('change', () => {
-    const on = $(id).checked;
-    const params = { [id]: on ? 'on' : 'off' };
+$('power').addEventListener('change', () => {
+  queue({ power: $('power').checked ? 'on' : 'off' });
+});
+
+$('bg_power').addEventListener('change', () => {
+  const on = $('bg_power').checked;
+  if (!on) {
+    $('bg_flow').checked = false;
+    updateSwatch();
+    queue({ bg_power: 'off' });
+  } else if (flowOn()) {
+    // Если переливание выбрано, подсветка включается сразу им
+    queue(flowParams());
+  } else {
     // Включая подсветку, сразу задаём цвет: так она загорается цветным светом, а не в «последнем» режиме лампы
-    if (id === 'bg_power' && on) {
-      params.hue = $('hue').value;
-      params.sat = $('sat').value;
-      params.bg_bright = $('bg_bright').value;
-    }
-    queue(params);
-  });
+    queue({ bg_power: 'on', hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value });
+  }
 });
 
 let refreshing = false;
@@ -189,16 +232,21 @@ function refresh() {
       if (lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
       $('power').checked = (j.power === 'on');
       $('bg_power').checked = (j.bg_power === 'on');
+      // Лампа сообщает, переливается ли она; если не сообщила, оставляем как есть
+      if (j.bg_flow === '0' || j.bg_flow === '1') $('bg_flow').checked = (j.bg_flow === '1');
       ['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(id => {
-        if (j[id] !== undefined) $(id).value = j[id];
+        // Во время переливания цвет всё время меняется, ползунки цвета не трогаем
+        const skip = flowOn() && (id === 'hue' || id === 'sat');
+        if (!skip && j[id] !== undefined) $(id).value = j[id];
         updateLabel(id);
       });
+      updateSwatch();
     })
     .catch(() => setStatus(false))
     .finally(() => { refreshing = false; });
 }
 
-['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(updateLabel);
+['bright', 'ct', 'bg_bright', 'hue', 'sat', 'flow_s'].forEach(updateLabel);
 refresh();
 setInterval(refresh, 15000);
 </script>
