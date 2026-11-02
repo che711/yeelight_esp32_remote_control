@@ -108,6 +108,23 @@ void handleState() {
   server.send(200, "application/json", j);
 }
 
+// Цвет из тона (0–359) и насыщенности (0–100) в число 0xRRGGBB для цветового потока лампы
+unsigned long hsvToRgb(int hue, int sat) {
+  float c = sat / 100.0f;
+  float x = c * (1.0f - fabsf(fmodf(hue / 60.0f, 2.0f) - 1.0f));
+  float m = 1.0f - c;
+  float r = 0, g = 0, b = 0;
+  if (hue < 60)       { r = c; g = x; }
+  else if (hue < 120) { r = x; g = c; }
+  else if (hue < 180) { g = c; b = x; }
+  else if (hue < 240) { g = x; b = c; }
+  else if (hue < 300) { r = x; b = c; }
+  else                { r = c; b = x; }
+  return ((unsigned long)lroundf((r + m) * 255) << 16) |
+         ((unsigned long)lroundf((g + m) * 255) << 8) |
+          (unsigned long)lroundf((b + m) * 255);
+}
+
 void handleSet() {
   bool allOk = true;
   bool lampSilent = false;  // лампа не ответила совсем: остальные команды пробовать нет смысла
@@ -150,18 +167,31 @@ void handleSet() {
       run("bg_set_power", "[\"off\",\"smooth\",300]");
     }
   }
-  // Переливание: лампа сама плавно крутит цвета по кругу, плата после запуска ей не нужна.
+  // Эффекты подсветки: лампа сама крутит цвета, плата после запуска ей не нужна.
   // Запускаем сценой «cf», как и обычное включение подсветки: она заодно включает подсветку.
+  //   bg_flow=on   — переливание по кругу радуги
+  //   bg_flow=wave — волна: яркость плавно растёт и падает в выбранном цвете (hue, sat)
+  //   bg_flow=off  — остановить эффект
   if (server.hasArg("bg_flow")) {
-    if (server.arg("bg_flow") == "on") {
-      int stepMs = constrain(server.arg("flow_ms").toInt(), 500, 30000);  // время смены одного цвета
+    String mode = server.arg("bg_flow");
+    if (mode == "on" || mode == "wave") {
+      int stepMs = constrain(server.arg("flow_ms").toInt(), 500, 30000);  // время одного шага
       int br = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
-      const unsigned long colors[] = {0xFF0000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF};
       String flow = "";
-      for (int i = 0; i < 6; i++) {
-        if (i) flow += ",";
-        // длительность, режим 1 (RGB), цвет, яркость
-        flow += String(stepMs) + ",1," + String(colors[i]) + "," + String(br);
+      if (mode == "on") {
+        const unsigned long colors[] = {0xFF0000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF};
+        for (int i = 0; i < 6; i++) {
+          if (i) flow += ",";
+          // длительность, режим 1 (RGB), цвет, яркость
+          flow += String(stepMs) + ",1," + String(colors[i]) + "," + String(br);
+        }
+      } else {
+        int hue = server.hasArg("hue") ? constrain(server.arg("hue").toInt(), 0, 359) : 0;
+        int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
+        int lo = max(1, br * 15 / 100);  // нижняя точка волны
+        String rgb = String(hsvToRgb(hue, sat));
+        flow = String(stepMs) + ",1," + rgb + "," + String(lo) + "," +
+               String(stepMs) + ",1," + rgb + "," + String(br);
       }
       // 0 — крутить бесконечно, 1 — после остановки остаться на текущем цвете
       run("bg_set_scene", "[\"cf\",0,1,\"" + flow + "\"]");

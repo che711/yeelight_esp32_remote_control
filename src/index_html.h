@@ -28,6 +28,8 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   #white { margin-top:10px; padding:8px 18px; border:1px solid var(--line); border-radius:8px;
            background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
   #white:active { background:var(--accent); color:#000; }
+  select { padding:6px 10px; border:1px solid var(--line); border-radius:8px;
+           background:#2a2e36; color:var(--text); font:inherit; }
 </style>
 </head>
 <body>
@@ -49,8 +51,14 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     <label class="row"><span>Включена</span><input type="checkbox" id="bg_power" class="sw"></label>
     <div class="row"><span>Яркость</span><b id="bg_bright_v"></b></div>
     <input type="range" id="bg_bright" min="1" max="100">
-    <label class="row"><span>Переливание</span><input type="checkbox" id="bg_flow" class="sw"></label>
-    <div class="row"><span>Время смены цвета</span><b id="flow_s_v"></b></div>
+    <div class="row"><span>Эффект</span>
+      <select id="bg_effect">
+        <option value="off">Нет</option>
+        <option value="rainbow">Переливание</option>
+        <option value="wave">Волна</option>
+      </select>
+    </div>
+    <div class="row"><span>Время одного шага</span><b id="flow_s_v"></b></div>
     <input type="range" id="flow_s" min="1" max="20" value="3">
     <div class="row"><span>Цвет</span><b id="hue_v"></b></div>
     <input type="range" id="hue" min="0" max="359">
@@ -75,15 +83,22 @@ function setStatus(ok) {
   s.className = ok ? '' : 'bad';
 }
 
-function flowOn() { return $('bg_flow').checked; }
+function effect() { return $('bg_effect').value; }  // off, rainbow или wave
+function flowOn() { return effect() !== 'off'; }
 
-// Параметры запуска переливания: цвета лампа крутит сама, нужны только скорость и яркость
+// Параметры запуска эффекта: цвета лампа крутит сама.
+// Переливанию нужны скорость и яркость, волне ещё и цвет.
 function flowParams() {
-  return { bg_flow: 'on', flow_ms: $('flow_s').value * 1000, bg_bright: $('bg_bright').value };
+  const p = { bg_flow: effect() === 'wave' ? 'wave' : 'on', flow_ms: $('flow_s').value * 1000, bg_bright: $('bg_bright').value };
+  if (effect() === 'wave') { p.hue = $('hue').value; p.sat = $('sat').value; }
+  return p;
 }
 
 function updateSwatch() {
-  $('swatch').style.background = flowOn() ? FLOW_GRADIENT : hsvCss(+$('hue').value, +$('sat').value);
+  const col = hsvCss(+$('hue').value, +$('sat').value);
+  const e = effect();
+  $('swatch').style.background = e === 'rainbow' ? FLOW_GRADIENT
+    : e === 'wave' ? 'linear-gradient(90deg,#000,' + col + ',#000)' : col;
 }
 
 function updateLabel(id) {
@@ -156,13 +171,13 @@ function flush() {
   });
 });
 
-// Пока переливание включено, яркость меняем, перезапуская его с новой яркостью
+// Пока эффект включён, яркость меняем, перезапуская его с новой яркостью
 $('bg_bright').addEventListener('input', () => {
   updateLabel('bg_bright');
   queue(flowOn() ? flowParams() : { bg_bright: $('bg_bright').value });
 });
 
-$('bg_flow').addEventListener('change', () => {
+$('bg_effect').addEventListener('change', () => {
   updateSwatch();
   queue(flowOn() ? flowParams() : { bg_flow: 'off' });
 });
@@ -172,16 +187,16 @@ $('flow_s').addEventListener('input', () => {
   if (flowOn()) queue(flowParams());
 });
 
-// Ручной выбор цвета выключает переливание
-function leaveFlow() {
-  const was = flowOn();
-  $('bg_flow').checked = false;
-  return was ? { bg_flow: 'off' } : {};
+// Ручной выбор цвета выключает переливание; волна при этом просто меняет цвет
+function leaveRainbow() {
+  if (effect() !== 'rainbow') return {};
+  $('bg_effect').value = 'off';
+  return { bg_flow: 'off' };
 }
 
 ['hue', 'sat'].forEach(id => {
   $(id).addEventListener('input', () => {
-    const stop = leaveFlow();
+    const stop = leaveRainbow();
     // При насыщенности 0 цвет всегда белый, поэтому ползунок цвета ничего бы не менял.
     // Если после «Белого» двигают цвет, возвращаем насыщенность на максимум.
     if (id === 'hue' && +$('sat').value === 0) {
@@ -189,15 +204,15 @@ function leaveFlow() {
       updateLabel('sat');
     }
     updateLabel(id);
-    queue(Object.assign({ hue: $('hue').value, sat: $('sat').value }, stop));
+    queue(effect() === 'wave' ? flowParams() : Object.assign({ hue: $('hue').value, sat: $('sat').value }, stop));
   });
 });
 
 $('white').addEventListener('click', () => {
-  const stop = leaveFlow();
+  const stop = leaveRainbow();
   $('sat').value = 0;
   updateLabel('sat');
-  queue(Object.assign({ hue: $('hue').value, sat: 0 }, stop));
+  queue(effect() === 'wave' ? flowParams() : Object.assign({ hue: $('hue').value, sat: 0 }, stop));
 });
 
 $('power').addEventListener('change', () => {
@@ -207,11 +222,11 @@ $('power').addEventListener('change', () => {
 $('bg_power').addEventListener('change', () => {
   const on = $('bg_power').checked;
   if (!on) {
-    $('bg_flow').checked = false;
+    $('bg_effect').value = 'off';
     updateSwatch();
     queue({ bg_power: 'off' });
   } else if (flowOn()) {
-    // Если переливание выбрано, подсветка включается сразу им
+    // Если эффект выбран, подсветка включается сразу им
     queue(flowParams());
   } else {
     // Включая подсветку, сразу задаём цвет: так она загорается цветным светом, а не в «последнем» режиме лампы
@@ -232,10 +247,11 @@ function refresh() {
       if (lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
       $('power').checked = (j.power === 'on');
       $('bg_power').checked = (j.bg_power === 'on');
-      // Лампа сообщает, переливается ли она; если не сообщила, оставляем как есть
-      if (j.bg_flow === '0' || j.bg_flow === '1') $('bg_flow').checked = (j.bg_flow === '1');
+      // Лампа сообщает, идёт ли эффект, но не какой именно: после перезагрузки страницы считаем его переливанием
+      if (j.bg_flow === '0') $('bg_effect').value = 'off';
+      else if (j.bg_flow === '1' && !flowOn()) $('bg_effect').value = 'rainbow';
       ['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(id => {
-        // Во время переливания цвет всё время меняется, ползунки цвета не трогаем
+        // Во время эффекта цвет лампы меняется, ползунки цвета не трогаем
         const skip = flowOn() && (id === 'hue' || id === 'sat');
         if (!skip && j[id] !== undefined) $(id).value = j[id];
         updateLabel(id);
