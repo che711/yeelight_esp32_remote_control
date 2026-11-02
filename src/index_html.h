@@ -112,14 +112,22 @@ function schedule() {
   timer = setTimeout(() => { timer = null; flush(); }, wait);
 }
 
+// fetch с ограничением по времени: без него зависший запрос навсегда блокирует очередь команд
+function fetchJson(url, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal })
+    .then(r => r.json())
+    .finally(() => clearTimeout(t));
+}
+
 function flush() {
   if (!Object.keys(queued).length) return;
   const params = queued;
   queued = {};
   inflight = true;
   lastSent = Date.now();
-  fetch('/api/set?' + new URLSearchParams(params))
-    .then(r => r.json())
+  fetchJson('/api/set?' + new URLSearchParams(params), 30000)
     .then(j => setStatus(j.ok))
     .catch(() => setStatus(false))
     .finally(() => {
@@ -160,13 +168,17 @@ $('white').addEventListener('click', () => {
   });
 });
 
+let refreshing = false;
+
 function refresh() {
-  if (Date.now() - lastAction < 5000 || inflight || timer) return;  // не мешаем, пока двигаете ползунок
-  fetch('/api/state')
-    .then(r => r.json())
+  if (Date.now() - lastAction < 5000 || inflight || timer || refreshing) return;  // не мешаем, пока двигаете ползунок
+  refreshing = true;
+  const actionAtStart = lastAction;
+  fetchJson('/api/state', 10000)
     .then(j => {
       setStatus(j.ok);
       if (!j.ok) return;
+      if (lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
       $('power').checked = (j.power === 'on');
       $('bg_power').checked = (j.bg_power === 'on');
       ['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(id => {
@@ -174,7 +186,8 @@ function refresh() {
         updateLabel(id);
       });
     })
-    .catch(() => setStatus(false));
+    .catch(() => setStatus(false))
+    .finally(() => { refreshing = false; });
 }
 
 ['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(updateLabel);
