@@ -164,7 +164,15 @@ $('white').addEventListener('click', () => {
 
 ['power', 'bg_power'].forEach(id => {
   $(id).addEventListener('change', () => {
-    queue({ [id]: $(id).checked ? 'on' : 'off' });
+    const on = $(id).checked;
+    const params = { [id]: on ? 'on' : 'off' };
+    // Включая подсветку, сразу задаём цвет: так она загорается цветным светом, а не в «последнем» режиме лампы
+    if (id === 'bg_power' && on) {
+      params.hue = $('hue').value;
+      params.sat = $('sat').value;
+      params.bg_bright = $('bg_bright').value;
+    }
+    queue(params);
   });
 });
 
