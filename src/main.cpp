@@ -127,19 +127,32 @@ void handleSet() {
     int v = constrain(server.arg("ct").toInt(), 2700, 6500);
     run("set_ct_abx", "[" + String(v) + ",\"smooth\",150]");
   }
+  bool bgDone = false;  // подсветка уже получила цвет и яркость вместе с включением
   if (server.hasArg("bg_power")) {
     if (server.arg("bg_power") == "on") {
-      // Последний параметр 3 — включить сразу в режиме HSV, без «последнего режима» лампы
-      run("bg_set_power", "[\"on\",\"smooth\",300,3]");
+      // Команда bg_set_power on у этой лампы отвечает «ok», но подсветку не включает.
+      // Поэтому включаем сценой: она сама включает подсветку и задаёт цвет и яркость.
+      int hue = server.hasArg("hue") ? constrain(server.arg("hue").toInt(), 0, 359) : 0;
+      int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
+      int br  = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
+      run("bg_set_scene", "[\"hsv\"," + String(hue) + "," + String(sat) + "," + String(br) + "]");
+      bgDone = true;
+      // Проверяем, что подсветка правда включилась; если нет, переключаем командой bg_toggle
+      if (!lampSilent) {
+        String v[1];
+        String st = sendCmd("get_prop", "[\"bg_power\"]");
+        if (st.length() == 0) lampSilent = true;
+        else if (parseResult(st, v, 1) == 1 && v[0] != "on") run("bg_toggle", "[]");
+      }
     } else {
       run("bg_set_power", "[\"off\",\"smooth\",300]");
     }
   }
-  if (server.hasArg("bg_bright")) {
+  if (server.hasArg("bg_bright") && !bgDone) {
     int v = constrain(server.arg("bg_bright").toInt(), 1, 100);
     run("bg_set_bright", "[" + String(v) + ",\"smooth\",150]");
   }
-  if (server.hasArg("hue")) {
+  if (server.hasArg("hue") && !bgDone) {
     int hue = constrain(server.arg("hue").toInt(), 0, 359);
     int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
     run("bg_set_hsv", "[" + String(hue) + "," + String(sat) + ",\"smooth\",150]");
