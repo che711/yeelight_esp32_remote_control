@@ -108,8 +108,12 @@ void handleState() {
 
 void handleSet() {
   bool allOk = true;
+  bool lampSilent = false;  // лампа не ответила совсем: остальные команды пробовать нет смысла
   auto run = [&](const String &method, const String &params) {
-    if (!replyOk(sendCmd(method, params))) allOk = false;
+    if (lampSilent) { allOk = false; return; }
+    String reply = sendCmd(method, params);
+    if (reply.length() == 0) lampSilent = true;
+    if (!replyOk(reply)) allOk = false;
   };
 
   if (server.hasArg("power")) {
@@ -179,6 +183,7 @@ void connectWifi() {
     for (int i = 0; i < n; i++) {
       Serial.printf("  \"%s\"  канал %d  %d dBm\n", WiFi.SSID(i).c_str(), WiFi.channel(i), WiFi.RSSI(i));
     }
+    WiFi.scanDelete();  // освобождаем память под результаты сканирования
   }
 }
 
