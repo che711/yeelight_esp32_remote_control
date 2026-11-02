@@ -25,9 +25,9 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   #hue::-moz-range-thumb { width:22px; height:22px; border-radius:50%; background:#fff; border:2px solid #000; }
   .sw { width:50px; height:28px; accent-color:var(--accent); transform:scale(1.2); }
   #swatch { width:100%; height:10px; border-radius:5px; margin-top:10px; }
-  #white { margin-top:10px; padding:8px 18px; border:1px solid var(--line); border-radius:8px;
+  #white, #bg_lock { margin-top:10px; padding:8px 18px; border:1px solid var(--line); border-radius:8px;
            background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
-  #white:active { background:var(--accent); color:#000; }
+  #white:active, #bg_lock:active { background:var(--accent); color:#000; }
   select { padding:6px 10px; border:1px solid var(--line); border-radius:8px;
            background:#2a2e36; color:var(--text); font:inherit; }
 </style>
@@ -56,8 +56,10 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
         <option value="off">Нет</option>
         <option value="rainbow">Переливание</option>
         <option value="wave">Волна</option>
+        <option value="fire">Костёр</option>
       </select>
     </div>
+    <button id="bg_lock" type="button" hidden>Зафиксировать цвет</button>
     <div class="row"><span>Время одного шага</span><b id="flow_s_v"></b></div>
     <input type="range" id="flow_s" min="1" max="20" value="3">
     <div class="row"><span>Цвет</span><b id="hue_v"></b></div>
@@ -73,6 +75,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 const $ = id => document.getElementById(id);
 const suffix = { bright:'%', ct:' K', bg_bright:'%', hue:'°', sat:'%', flow_s:' с' };
 const FLOW_GRADIENT = 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)';
+const FIRE_GRADIENT = 'linear-gradient(90deg,#c21800,#ff6a00,#ffb400,#ff3c00,#ff8c00,#ff2800)';
 let lastAction = 0;
 let inflight = false;
 let queued = {};
@@ -83,21 +86,24 @@ function setStatus(ok) {
   s.className = ok ? '' : 'bad';
 }
 
-function effect() { return $('bg_effect').value; }  // off, rainbow или wave
+function effect() { return $('bg_effect').value; }  // off, rainbow, wave или fire
 function flowOn() { return effect() !== 'off'; }
 
 // Параметры запуска эффекта: цвета лампа крутит сама.
-// Переливанию нужны скорость и яркость, волне ещё и цвет.
+// Переливанию и костру нужны скорость и яркость, волне ещё и цвет.
 function flowParams() {
-  const p = { bg_flow: effect() === 'wave' ? 'wave' : 'on', flow_ms: $('flow_s').value * 1000, bg_bright: $('bg_bright').value };
+  const modes = { rainbow: 'on', wave: 'wave', fire: 'fire' };
+  const p = { bg_flow: modes[effect()], flow_ms: $('flow_s').value * 1000, bg_bright: $('bg_bright').value };
   if (effect() === 'wave') { p.hue = $('hue').value; p.sat = $('sat').value; }
   return p;
 }
 
 function updateSwatch() {
+  $('bg_lock').hidden = !flowOn();
   const col = hsvCss(+$('hue').value, +$('sat').value);
   const e = effect();
   $('swatch').style.background = e === 'rainbow' ? FLOW_GRADIENT
+    : e === 'fire' ? FIRE_GRADIENT
     : e === 'wave' ? 'linear-gradient(90deg,#000,' + col + ',#000)' : col;
 }
 
@@ -107,6 +113,20 @@ function updateLabel(id) {
 }
 
 // HSV (яркость 100%) в цвет для полоски-образца; при насыщенности 0 получается белый
+// Обратное преобразование: число 0xRRGGBB от лампы в тон и насыщенность для ползунков
+function rgbToHs(n) {
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  let h = 0;
+  if (d) {
+    if (mx === r)      h = 60 * (((g - b) / d) % 6);
+    else if (mx === g) h = 60 * ((b - r) / d + 2);
+    else               h = 60 * ((r - g) / d + 4);
+  }
+  if (h < 0) h += 360;
+  return { hue: Math.round(h) % 360, sat: mx ? Math.round(d / mx * 100) : 0 };
+}
+
 function hsvCss(h, s) {
   const c = s / 100;
   const x = c * (1 - Math.abs((h / 60) % 2 - 1));
@@ -127,6 +147,7 @@ function hsvCss(h, s) {
 const MIN_GAP_MS = 1200;
 let lastSent = 0;
 let timer = null;
+let syncAfterSend = false;  // после фиксации цвета читаем у лампы, на каком цвете она остановилась
 
 function queue(params) {
   Object.assign(queued, params);
@@ -161,6 +182,7 @@ function flush() {
     .finally(() => {
       inflight = false;
       if (Object.keys(queued).length) schedule();
+      else if (syncAfterSend) { syncAfterSend = false; setTimeout(() => refresh(true), MIN_GAP_MS); }
     });
 }
 
@@ -177,6 +199,14 @@ $('bg_bright').addEventListener('input', () => {
   queue(flowOn() ? flowParams() : { bg_bright: $('bg_bright').value });
 });
 
+// Остановить эффект на том цвете, который сейчас горит
+$('bg_lock').addEventListener('click', () => {
+  $('bg_effect').value = 'off';
+  updateSwatch();
+  syncAfterSend = true;
+  queue({ bg_flow: 'off' });
+});
+
 $('bg_effect').addEventListener('change', () => {
   updateSwatch();
   queue(flowOn() ? flowParams() : { bg_flow: 'off' });
@@ -187,9 +217,9 @@ $('flow_s').addEventListener('input', () => {
   if (flowOn()) queue(flowParams());
 });
 
-// Ручной выбор цвета выключает переливание; волна при этом просто меняет цвет
+// Ручной выбор цвета выключает переливание и костёр; волна при этом просто меняет цвет
 function leaveRainbow() {
-  if (effect() !== 'rainbow') return {};
+  if (effect() === 'off' || effect() === 'wave') return {};
   $('bg_effect').value = 'off';
   return { bg_flow: 'off' };
 }
@@ -236,15 +266,16 @@ $('bg_power').addEventListener('change', () => {
 
 let refreshing = false;
 
-function refresh() {
-  if (Date.now() - lastAction < 5000 || inflight || timer || refreshing) return;  // не мешаем, пока двигаете ползунок
+function refresh(afterLock) {
+  if (inflight || timer || refreshing) return;
+  if (!afterLock && Date.now() - lastAction < 5000) return;  // не мешаем, пока двигаете ползунок
   refreshing = true;
   const actionAtStart = lastAction;
   fetchJson('/api/state', 10000)
     .then(j => {
       setStatus(j.ok);
       if (!j.ok) return;
-      if (lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
+      if (!afterLock && lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
       $('power').checked = (j.power === 'on');
       $('bg_power').checked = (j.bg_power === 'on');
       // Лампа сообщает, идёт ли эффект, но не какой именно: после перезагрузки страницы считаем его переливанием
@@ -256,6 +287,14 @@ function refresh() {
         if (!skip && j[id] !== undefined) $(id).value = j[id];
         updateLabel(id);
       });
+      // После фиксации ставим ползунки цвета на тот цвет, где остановилась лампа
+      if (afterLock === true && j.rgb > 0) {
+        const hs = rgbToHs(j.rgb);
+        $('hue').value = hs.hue;
+        $('sat').value = hs.sat;
+        updateLabel('hue');
+        updateLabel('sat');
+      }
       updateSwatch();
     })
     .catch(() => setStatus(false))

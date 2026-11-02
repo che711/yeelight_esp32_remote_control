@@ -88,9 +88,9 @@ void handleRoot() {
 
 void handleState() {
   String reply = sendCmd("get_prop",
-      "[\"power\",\"bright\",\"ct\",\"bg_power\",\"bg_bright\",\"bg_hue\",\"bg_sat\",\"bg_flowing\"]");
-  String v[8];
-  int n = parseResult(reply, v, 8);
+      "[\"power\",\"bright\",\"ct\",\"bg_power\",\"bg_bright\",\"bg_hue\",\"bg_sat\",\"bg_flowing\",\"bg_rgb\"]");
+  String v[9];
+  int n = parseResult(reply, v, 9);
   if (n < 7) {
     server.send(200, "application/json", "{\"ok\":false}");
     return;
@@ -103,7 +103,8 @@ void handleState() {
   j += ",\"bg_bright\":" + String(v[4].toInt());
   j += ",\"hue\":" + String(v[5].toInt());
   j += ",\"sat\":" + String(v[6].toInt());
-  j += ",\"bg_flow\":\"" + (n >= 8 ? v[7] : String("")) + "\"";  // "1" — переливается, "0" — нет
+  j += ",\"bg_flow\":\"" + (n >= 8 ? v[7] : String("")) + "\"";  // "1" — идёт эффект, "0" — нет
+  j += ",\"rgb\":" + String(n >= 9 ? v[8].toInt() : 0);             // текущий цвет подсветки, нужен для фиксации
   j += "}";
   server.send(200, "application/json", j);
 }
@@ -171,10 +172,11 @@ void handleSet() {
   // Запускаем сценой «cf», как и обычное включение подсветки: она заодно включает подсветку.
   //   bg_flow=on   — переливание по кругу радуги
   //   bg_flow=wave — волна: яркость плавно растёт и падает в выбранном цвете (hue, sat)
+  //   bg_flow=fire — костёр: тёплые оранжево-красные цвета с неровным мерцанием
   //   bg_flow=off  — остановить эффект
   if (server.hasArg("bg_flow")) {
     String mode = server.arg("bg_flow");
-    if (mode == "on" || mode == "wave") {
+    if (mode == "on" || mode == "wave" || mode == "fire") {
       int stepMs = constrain(server.arg("flow_ms").toInt(), 500, 30000);  // время одного шага
       int br = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
       String flow = "";
@@ -184,6 +186,18 @@ void handleSet() {
           if (i) flow += ",";
           // длительность, режим 1 (RGB), цвет, яркость
           flow += String(stepMs) + ",1," + String(colors[i]) + "," + String(br);
+        }
+      } else if (mode == "fire") {
+        // Цвета и яркость идут вразнобой, длительности разные: так пламя выглядит живым.
+        // Длительность шага — доля от выбранного времени, чтобы мерцание было быстрее переливания.
+        const unsigned long fc[] = {0xFF3C00, 0xFF8C00, 0xFF2800, 0xFFB400, 0xFF5000,
+                                    0xFF6A00, 0xFFD23C, 0xFF3200, 0xFF9600, 0xFF4600};
+        const int fb[] = {100, 45, 80, 30, 65, 95, 40, 75, 55, 90};      // яркость в процентах от выбранной
+        const int ft[] = {15, 30, 20, 40, 12, 25, 35, 18, 28, 22};       // длительность в сотых долях шага
+        for (int i = 0; i < 10; i++) {
+          if (i) flow += ",";
+          int t = max(50, stepMs * ft[i] / 100);
+          flow += String(t) + ",1," + String(fc[i]) + "," + String(max(1, br * fb[i] / 100));
         }
       } else {
         int hue = server.hasArg("hue") ? constrain(server.arg("hue").toInt(), 0, 359) : 0;
