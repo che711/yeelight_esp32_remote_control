@@ -27,11 +27,12 @@ uint8_t busyPct = 0;
 // ---------- Связь с лампой ----------
 
 // Отправляет одну команду лампе, возвращает первую строку ответа
-String sendCmd(const String &method, const String &params) {
+String sendCmd(const String &method, const String &params, uint32_t gapMs = 1000) {
   // Лампа принимает около 60 команд в минуту, иначе замолкает на минуту и дольше.
-  // Держим паузу не меньше 1 секунды между командами.
+  // Обычно держим паузу не меньше 1 секунды между командами; короткая пауза нужна только для пары
+  // «выключить основной свет — вернуть подсветку», такая пара не сбивает минутный счёт.
   static uint32_t lastCmd = 0;
-  while (lastCmd != 0 && millis() - lastCmd < 1000) delay(20);
+  while (lastCmd != 0 && millis() - lastCmd < gapMs) delay(10);
   lastCmd = millis();
 
   WiFiClient c;
@@ -326,15 +327,23 @@ String buildFlow(const FlowDef &d, long baseMs, int br, unsigned long userRgb, i
 void handleSet() {
   bool allOk = true;
   bool lampSilent = false;  // лампа не ответила совсем: остальные команды пробовать нет смысла
+  uint32_t nextGap = 1000;  // пауза перед следующей командой, мс
   auto run = [&](const String &method, const String &params) {
     if (lampSilent) { allOk = false; return; }
-    String reply = sendCmd(method, params);
+    String reply = sendCmd(method, params, nextGap);
+    nextGap = 1000;
     if (reply.length() == 0) lampSilent = true;
     if (!replyOk(reply)) allOk = false;
   };
 
   if (server.hasArg("power")) {
     run("set_power", String("[\"") + (server.arg("power") == "on" ? "on" : "off") + "\",\"smooth\",300]");
+    // Лампа гасит оба света сразу, а страница тут же просит вернуть подсветку: не ждём лишнего,
+    // чтобы подсветка была выключена как можно меньше
+    if (server.arg("power") != "on" &&
+        (server.hasArg("bg_power") || server.hasArg("bg_flow") || server.hasArg("bg_sleep"))) {
+      nextGap = 250;
+    }
   }
   if (server.hasArg("bright")) {
     int v = constrain(server.arg("bright").toInt(), 1, 100);

@@ -436,11 +436,29 @@ $('white').addEventListener('click', () => {
   queue(usesColor() ? flowParams() : Object.assign({ hue: $('hue').value, sat: 0 }, stop), true);
 });
 
+// Что отправить, чтобы вернуть подсветку в нынешнее состояние: таймер сна, эффект или обычный цвет
+function restoreBgParams() {
+  const color = { hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value };
+  if (sleepEnd > Date.now()) {
+    return Object.assign({ bg_sleep: Math.max(1, Math.ceil((sleepEnd - Date.now()) / 60000)) }, color);
+  }
+  if (flowOn()) return flowParams();
+  return Object.assign({ bg_power: 'on' }, color);
+}
+
 $('power').addEventListener('click', () => {
   const on = !isOn('power');
   setOn('power', on);
   syncAfterSend = 'state';  // проверяем, как лампа на самом деле отреагировала: обе кнопки берём из её ответа
-  queue({ power: on ? 'on' : 'off' }, true);
+  const params = { power: on ? 'on' : 'off' };
+  // Эта лампа включает и выключает оба света сразу, отдельной команды для основного света у неё нет.
+  // Поэтому состояние подсветки сразу восстанавливаем следующей командой.
+  if (isOn('bg_power')) {
+    if (!on) Object.assign(params, restoreBgParams());  // основной погас вместе с подсветкой: возвращаем подсветку
+  } else if (on) {
+    params.bg_power = 'off';  // основной включился вместе с подсветкой, а она была выключена
+  }
+  queue(params, true);
 });
 
 $('bg_power').addEventListener('click', () => {
