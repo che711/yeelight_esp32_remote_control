@@ -8,6 +8,18 @@ WebServer server(80);
 uint32_t cmdId = 1;
 uint32_t lastWifiTry = 0;
 
+// Какой эффект запускали на подсветке и с какими настройками. Лампа сообщает только «эффект идёт или нет»,
+// а после перезагрузки страницы нужно показать, какой именно, поэтому помним это на плате.
+String bgEffect = "off";  // off, on (переливание), wave, fire
+int bgFlowMs = 3000;
+int bgFlowHue = 0;
+int bgFlowSat = 100;
+
+// Занятость сервера: какую долю времени за последние 10 секунд плата обрабатывала запросы
+uint32_t busyUs = 0;
+uint32_t busyWindowStart = 0;
+uint8_t busyPct = 0;
+
 // ---------- Связь с лампой ----------
 
 // Отправляет одну команду лампе, возвращает первую строку ответа
@@ -105,6 +117,10 @@ void handleState() {
   j += ",\"sat\":" + String(v[6].toInt());
   j += ",\"bg_flow\":\"" + (n >= 8 ? v[7] : String("")) + "\"";  // "1" — идёт эффект, "0" — нет
   j += ",\"rgb\":" + String(n >= 9 ? v[8].toInt() : 0);             // текущий цвет подсветки, нужен для фиксации
+  j += ",\"effect\":\"" + bgEffect + "\"";                          // какой эффект запускали с этой платы
+  j += ",\"flow_ms\":" + String(bgFlowMs);
+  j += ",\"fhue\":" + String(bgFlowHue);
+  j += ",\"fsat\":" + String(bgFlowSat);
   j += "}";
   server.send(200, "application/json", j);
 }
@@ -124,6 +140,46 @@ unsigned long hsvToRgb(int hue, int sat) {
   return ((unsigned long)lroundf((r + m) * 255) << 16) |
          ((unsigned long)lroundf((g + m) * 255) << 8) |
           (unsigned long)lroundf((b + m) * 255);
+}
+
+// Экранирует кавычки и слэши, чтобы имя сети не сломало JSON
+String jsonEscape(const String &in) {
+  String out;
+  for (size_t i = 0; i < in.length(); i++) {
+    char c = in[i];
+    if (c == '"' || c == '\\') { out += '\\'; out += c; }
+    else if ((uint8_t)c >= 32) out += c;
+  }
+  return out;
+}
+
+// Сведения о плате и её загруженности для блока System / Control
+void handleSystem() {
+  float temp = temperatureRead();
+  String j = "{";
+  j += "\"chip\":\"" + jsonEscape(ESP.getChipModel()) + "\"";
+  j += ",\"cores\":" + String(ESP.getChipCores());
+  j += ",\"cpu_mhz\":" + String(ESP.getCpuFreqMHz());
+  j += ",\"heap_total\":" + String(ESP.getHeapSize());
+  j += ",\"heap_free\":" + String(ESP.getFreeHeap());
+  j += ",\"heap_min\":" + String(ESP.getMinFreeHeap());
+  j += ",\"sketch\":" + String(ESP.getSketchSize());
+  j += ",\"sketch_free\":" + String(ESP.getFreeSketchSpace());  // размер раздела под прошивку
+  j += ",\"uptime\":" + String(millis() / 1000);
+  j += ",\"busy\":" + String(busyPct);
+  j += ",\"temp\":" + (isnan(temp) ? String("null") : String(temp, 1));
+  j += ",\"ssid\":\"" + jsonEscape(WiFi.SSID()) + "\"";
+  j += ",\"rssi\":" + String(WiFi.RSSI());
+  j += ",\"ip\":\"" + WiFi.localIP().toString() + "\"";
+  j += ",\"mac\":\"" + WiFi.macAddress() + "\"";
+  j += "}";
+  server.send(200, "application/json", j);
+}
+
+void handleReboot() {
+  server.send(200, "application/json", "{\"ok\":true}");
+  delay(300);  // даём ответу уйти в браузер
+  ESP.restart();
 }
 
 void handleSet() {
@@ -148,6 +204,9 @@ void handleSet() {
     run("set_ct_abx", "[" + String(v) + ",\"smooth\",150]");
   }
   bool bgDone = false;  // подсветка уже получила цвет и яркость вместе с включением
+  if (server.hasArg("bg_power") || server.hasArg("bg_flow") || server.hasArg("hue") || server.hasArg("bg_bright")) {
+    bgEffect = "off";  // любая из этих команд останавливает эффект на лампе; запуск эффекта ниже запишет его заново
+  }
   if (server.hasArg("bg_power")) {
     if (server.arg("bg_power") == "on") {
       // Команда bg_set_power on у этой лампы отвечает «ok», но подсветку не включает.
@@ -209,6 +268,20 @@ void handleSet() {
       }
       // 0 — крутить бесконечно, 1 — после остановки остаться на текущем цвете
       run("bg_set_scene", "[\"cf\",0,1,\"" + flow + "\"]");
+      bgDone = true;
+      bgEffect = mode;
+      bgFlowMs = stepMs;
+      if (mode == "wave") {
+        bgFlowHue = server.hasArg("hue") ? constrain(server.arg("hue").toInt(), 0, 359) : 0;
+        bgFlowSat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
+      }
+    } else if (server.hasArg("hue")) {
+      // Выход из эффекта сразу в нужный цвет: одна сцена вместо «остановить» + «задать цвет».
+      // Так цвет меняется на секунду раньше: лампе нельзя слать команды чаще раза в секунду.
+      int hue = constrain(server.arg("hue").toInt(), 0, 359);
+      int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
+      int br  = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
+      run("bg_set_scene", "[\"hsv\"," + String(hue) + "," + String(sat) + "," + String(br) + "]");
       bgDone = true;
     } else {
       run("bg_stop_cf", "[]");
@@ -289,11 +362,21 @@ void setup() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/api/state", HTTP_GET, handleState);
   server.on("/api/set", HTTP_GET, handleSet);
+  server.on("/api/system", HTTP_GET, handleSystem);
+  server.on("/api/reboot", HTTP_POST, handleReboot);
   server.begin();
 }
 
 void loop() {
+  uint32_t t0 = micros();
   server.handleClient();
+  busyUs += micros() - t0;
+  if (millis() - busyWindowStart >= 10000) {
+    uint32_t pct = busyUs / ((millis() - busyWindowStart) * 10UL);  // микросекунды в проценты окна
+    busyPct = pct > 100 ? 100 : pct;
+    busyUs = 0;
+    busyWindowStart = millis();
+  }
 
   // Раз в 10 секунд сообщаем состояние, чтобы адрес был виден, даже если монитор открыли поздно
   static uint32_t lastInfo = 0;
