@@ -100,15 +100,18 @@ void handleRoot() {
 
 void handleState() {
   String reply = sendCmd("get_prop",
-      "[\"power\",\"bright\",\"ct\",\"bg_power\",\"bg_bright\",\"bg_hue\",\"bg_sat\",\"bg_flowing\",\"bg_rgb\"]");
-  String v[9];
-  int n = parseResult(reply, v, 9);
+      "[\"power\",\"bright\",\"ct\",\"bg_power\",\"bg_bright\",\"bg_hue\",\"bg_sat\",\"bg_flowing\",\"bg_rgb\",\"main_power\"]");
+  String v[10];
+  int n = parseResult(reply, v, 10);
   if (n < 7) {
     server.send(200, "application/json", "{\"ok\":false}");
     return;
   }
   String j = "{\"ok\":true";
-  j += ",\"power\":\"" + v[0] + "\"";
+  // У этой лампы «power» показывает «включено», если горит хоть один из двух светов (основной или подсветка).
+  // Состояние именно основного света отдаёт «main_power»; если лампа его не вернула, берём «power».
+  String mainPower = (n >= 10 && v[9].length() > 0) ? v[9] : v[0];
+  j += ",\"power\":\"" + mainPower + "\"";
   j += ",\"bright\":" + String(v[1].toInt());
   j += ",\"ct\":" + String(v[2].toInt());
   j += ",\"bg_power\":\"" + v[3] + "\"";

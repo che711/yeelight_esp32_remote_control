@@ -203,7 +203,7 @@ function hsvCss(h, s) {
 const MIN_GAP_MS = 1200;
 let lastSent = 0;
 let timer = null;
-let syncAfterSend = false;  // после фиксации цвета читаем у лампы, на каком цвете она остановилась
+let syncAfterSend = false;  // после команды читаем состояние лампы: 'lock' — ещё и цвет, 'state' — только переключатели
 
 function queue(params, now) {
   Object.assign(queued, params);
@@ -245,7 +245,11 @@ function flush() {
     .finally(() => {
       inflight = false;
       if (Object.keys(queued).length) schedule();
-      else if (syncAfterSend) { syncAfterSend = false; setTimeout(() => refresh(true), MIN_GAP_MS); }
+      else if (syncAfterSend) {
+        const mode = syncAfterSend;
+        syncAfterSend = false;
+        setTimeout(() => refresh(true, mode === 'lock'), MIN_GAP_MS);
+      }
     });
 }
 
@@ -276,10 +280,10 @@ $('bg_lock').addEventListener('click', () => {
   if (flowOn()) {
     setEffect('off');
     updateSwatch();
-    syncAfterSend = true;
+    syncAfterSend = 'lock';
     queue({ bg_flow: 'off' }, true);
   } else {
-    refresh(true);  // эффекта нет: просто считываем цвет с лампы в ползунки
+    refresh(true, true);  // эффекта нет: просто считываем цвет с лампы в ползунки
   }
 });
 
@@ -318,6 +322,7 @@ $('white').addEventListener('click', () => {
 });
 
 $('power').addEventListener('change', () => {
+  syncAfterSend = 'state';  // проверяем, как лампа на самом деле отреагировала: оба переключателя берём из её ответа
   queue({ power: $('power').checked ? 'on' : 'off' }, true);
 });
 
@@ -341,16 +346,17 @@ $('bg_power').addEventListener('change', () => {
 let refreshing = false;
 const EFFECT_FROM_BOARD = { on: 'rainbow', wave: 'wave', fire: 'fire' };
 
-function refresh(afterLock) {
+// force — не ждать паузы после действий; applyColor — ещё и поставить ползунки цвета на цвет лампы
+function refresh(force, applyColor) {
   if (inflight || timer || refreshing) return;
-  if (!afterLock && Date.now() - lastAction < 5000) return;  // не мешаем, пока двигаете ползунок
+  if (!force && Date.now() - lastAction < 5000) return;  // не мешаем, пока двигаете ползунок
   refreshing = true;
   const actionAtStart = lastAction;
   fetchJson('/api/state', 10000)
     .then(j => {
       setStatus(j.ok);
       if (!j.ok) return;
-      if (!afterLock && lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
+      if (!force && lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
       $('power').checked = (j.power === 'on');
       $('bg_power').checked = (j.bg_power === 'on');
       if (!stateLoaded) {  // переключатели ждут первого ответа лампы, чтобы не показывать выдуманное состояние
@@ -384,7 +390,7 @@ function refresh(afterLock) {
         updateLabel('sat');
       }
       // После фиксации ставим ползунки цвета на тот цвет, где остановилась лампа
-      if (afterLock === true && j.rgb > 0) {
+      if (applyColor === true && j.rgb > 0) {
         const hs = rgbToHs(j.rgb);
         $('hue').value = hs.hue;
         $('sat').value = hs.sat;
