@@ -1,11 +1,11 @@
 #pragma once
 
 // ---- Wi-Fi ----
-#define WIFI_SSID "T-1000"
-#define WIFI_PASS "password"
+#define WIFI_SSID "ssid"  // имя сети Wi-Fi, к которой подключается плата
+#define WIFI_PASS "ssid_password" // пароль сети Wi-Fi
 
 // ---- Лампа ----
-#define LAMP_IP   "192.168.2.6"
+#define LAMP_IP   "your.lamp.ip"  // IP-адрес лампы в локальной сети
 #define LAMP_PORT 55443
 
 // ---- Веб-сервер ----

@@ -27,14 +27,16 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
          background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00); }
   #hue::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:#fff; border:2px solid #000; }
   #hue::-moz-range-thumb { width:22px; height:22px; border-radius:50%; background:#fff; border:2px solid #000; }
-  .sw { width:50px; height:28px; accent-color:var(--accent); transform:scale(1.2); }
-  .sw:disabled { opacity:.4; }
+  .pwr { width:100%; margin:4px 0 8px; padding:12px; border:1px solid var(--line); border-radius:10px;
+         background:#2a2e36; color:var(--dim); font:inherit; font-weight:600; cursor:pointer; }
+  .pwr.on { background:var(--accent); border-color:var(--accent); color:#000; }
+  .pwr:disabled { opacity:.5; cursor:default; }
   #swatch { width:100%; height:10px; border-radius:5px; margin-top:10px; }
   #white { margin-top:10px; padding:8px 18px; border:1px solid var(--line); border-radius:8px;
            background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
   #white:active { background:var(--accent); color:#000; }
   .seg { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 6px; }
-  .seg button { flex:1 1 40%; padding:9px 6px; border:1px solid var(--line); border-radius:8px;
+  .seg button { flex:1 1 30%; padding:9px 6px; border:1px solid var(--line); border-radius:8px;
                 background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
   .seg button:active { background:var(--accent); border-color:var(--accent); color:#000; }
   .seg button.on { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
@@ -48,6 +50,21 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
             background:#3a2020; color:#ffb4b4; font:inherit; cursor:pointer; }
   #reboot:active { background:#ff6b6b; color:#000; }
   #sys_note { font-size:12px; color:var(--dim); margin-top:8px; }
+  #sleep_note, #scene_note { font-size:13px; color:var(--dim); margin-top:6px; min-height:1em; }
+  #sleep_note { color:var(--accent); }
+  .scene { display:flex; gap:6px; margin:6px 0; }
+  .scene .go { flex:1; padding:9px 12px; text-align:left; border:1px solid var(--line); border-radius:8px;
+               background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
+  .scene .go:active { background:var(--accent); border-color:var(--accent); color:#000; }
+  .scene .del { width:44px; border:1px solid var(--line); border-radius:8px; background:#2a2e36;
+                color:var(--dim); font:inherit; cursor:pointer; }
+  .scene .del:active { background:#ff6b6b; color:#000; }
+  #scene_name { flex:1; min-width:0; padding:8px 10px; border:1px solid var(--line); border-radius:8px;
+                background:#2a2e36; color:var(--text); font:inherit; }
+  #scene_row { display:flex; gap:6px; margin-top:12px; }
+  #scene_save { padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:#2a2e36;
+                color:var(--text); font:inherit; cursor:pointer; }
+  #scene_save:active { background:var(--accent); border-color:var(--accent); color:#000; }
 </style>
 </head>
 <body>
@@ -57,7 +74,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
   <details class="card" id="sec_main" open>
     <summary>Основной свет</summary>
-    <label class="row"><span>Включён</span><input type="checkbox" id="power" class="sw" autocomplete="off" disabled></label>
+    <button type="button" id="power" class="pwr" data-on="0" disabled>Основной свет…</button>
     <div class="row"><span>Яркость</span><b id="bright_v"></b></div>
     <input type="range" id="bright" min="1" max="100" autocomplete="off">
     <div class="row"><span>Цветовая температура</span><b id="ct_v"></b></div>
@@ -66,25 +83,62 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
   <details class="card" id="sec_bg" open>
     <summary>Подсветка сзади</summary>
-    <label class="row"><span>Включена</span><input type="checkbox" id="bg_power" class="sw" autocomplete="off" disabled></label>
+    <button type="button" id="bg_power" class="pwr" data-on="0" disabled>Подсветка…</button>
     <div class="row"><span>Яркость</span><b id="bg_bright_v"></b></div>
     <input type="range" id="bg_bright" min="1" max="100" autocomplete="off">
     <div class="row"><span>Эффект</span></div>
-    <div class="seg" id="bg_effect">
+    <div id="bg_effect">
+    <div class="seg">
       <button type="button" data-v="off" class="on">Нет</button>
-      <button type="button" data-v="rainbow">Переливание</button>
       <button type="button" data-v="wave">Волна</button>
       <button type="button" data-v="fire">Костёр</button>
-      <button type="button" id="bg_lock">Зафиксировать цвет</button>
+      <button type="button" data-v="candle">Свеча</button>
+      <button type="button" data-v="sunset">Закат</button>
+      <button type="button" data-v="sunrise">Рассвет</button>
+      <button type="button" data-v="storm">Гроза</button>
+      <button type="button" data-v="ocean">Океан</button>
+      <button type="button" data-v="lava">Лава</button>
+      <button type="button" data-v="heart">Сердцебиение</button>
+      <button type="button" data-v="garland">Гирлянда</button>
+      <button type="button" data-v="police">Мигалка</button>
     </div>
-    <div class="row"><span>Время одного шага</span><b id="flow_s_v"></b></div>
+    <div class="row"><span>Переливание</span></div>
+    <div class="seg">
+      <button type="button" data-v="rainbow">Радуга</button>
+      <button type="button" data-v="warm">Тёплая</button>
+      <button type="button" data-v="cold">Холодная</button>
+      <button type="button" data-v="neon">Неон</button>
+      <button type="button" data-v="pastel">Пастель</button>
+    </div>
+    </div>
+    <div class="seg"><button type="button" id="bg_lock">Зафиксировать цвет</button></div>
+    <div class="row"><span id="flow_name">Время одного шага</span><b id="flow_s_v"></b></div>
     <input type="range" id="flow_s" min="1" max="20" value="3" autocomplete="off">
+    <div class="row"><span>Размах яркости (переливание)</span><b id="swing_v"></b></div>
+    <input type="range" id="swing" min="0" max="90" value="0" autocomplete="off">
     <div class="row"><span>Цвет</span><b id="hue_v"></b></div>
     <input type="range" id="hue" min="0" max="359" autocomplete="off">
     <div class="row"><span>Насыщенность</span><b id="sat_v"></b></div>
     <input type="range" id="sat" min="0" max="100" autocomplete="off">
     <button id="white" type="button">Белый</button>
     <div id="swatch"></div>
+    <div class="row"><span>Таймер сна</span><b id="sleep_m_v"></b></div>
+    <input type="range" id="sleep_m" min="1" max="120" value="30" autocomplete="off">
+    <div class="seg">
+      <button type="button" id="sleep_go">Запустить таймер</button>
+      <button type="button" id="sleep_stop">Отменить</button>
+    </div>
+    <div id="sleep_note"></div>
+  </details>
+
+  <details class="card" id="sec_scenes" open>
+    <summary>Сцены подсветки</summary>
+    <div id="scene_list"></div>
+    <div id="scene_row">
+      <input type="text" id="scene_name" maxlength="20" placeholder="Название сцены" autocomplete="off">
+      <button type="button" id="scene_save">Сохранить текущую</button>
+    </div>
+    <div id="scene_note"></div>
   </details>
 
   <details class="card" id="sec_sys" open>
@@ -109,14 +163,52 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
 <script>
 const $ = id => document.getElementById(id);
-const suffix = { bright:'%', ct:' K', bg_bright:'%', hue:'°', sat:'%', flow_s:' с' };
-const FLOW_GRADIENT = 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)';
-const FIRE_GRADIENT = 'linear-gradient(90deg,#c21800,#ff6a00,#ffb400,#ff3c00,#ff8c00,#ff2800)';
+const suffix = { bright:'%', ct:' K', bg_bright:'%', hue:'°', sat:'%', flow_s:' с', swing:'%', sleep_m:' мин' };
+// Полоска-образец для эффектов с готовыми цветами
+const SWATCHES = {
+  rainbow: 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)',
+  warm:    'linear-gradient(90deg,#ff3b00,#ff6a00,#ffa000,#ffc833,#ff2d55,#ff8a3d)',
+  cold:    'linear-gradient(90deg,#0066ff,#00b4ff,#00e0d0,#6a5cff,#00a0a0,#3aa0ff)',
+  neon:    'linear-gradient(90deg,#f0f,#0ff,#39ff14,#ff1493,#1f51ff,#ff0)',
+  pastel:  'linear-gradient(90deg,#ffb3ba,#ffdfba,#ffffba,#baffc9,#bae1ff,#e0bbff)',
+  fire:    'linear-gradient(90deg,#c21800,#ff6a00,#ffb400,#ff3c00,#ff8c00,#ff2800)',
+  candle:  'linear-gradient(90deg,#ff8a1f,#ffb04a,#ff8a1f,#ffa23a,#ff8a1f)',
+  sunset:  'linear-gradient(90deg,#ffe9c8,#ffb347,#ff7a18,#e8431a,#8b1a1a,#300606)',
+  sunrise: 'linear-gradient(90deg,#300606,#8b1a1a,#e8431a,#ff7a18,#ffb347,#ffe9c8)',
+  storm:   'linear-gradient(90deg,#0b1238,#fff,#0b1238,#0a0f2e,#fff,#101c4a)',
+  ocean:   'linear-gradient(90deg,#00a8a8,#0066cc,#2a00b8,#00c878,#00b4d8,#5a1ab8)',
+  lava:    'linear-gradient(90deg,#600000,#c81e00,#ff7a00,#c81e00,#600000)',
+  garland: 'linear-gradient(90deg,#f00 0 25%,#0c0 25% 50%,#fc0 50% 75%,#00f 75%)',
+  police:  'linear-gradient(90deg,#f00 0 50%,#00f 50%)'
+};
+// Эффекты, у которых цвет выбирается ползунками, и эффекты, которые идут один раз заданное время
+const COLOR_EFFECTS = ['wave', 'heart'];
+const PALETTE_EFFECTS = ['rainbow', 'warm', 'cold', 'neon', 'pastel'];  // переливания: у них работает «Размах яркости»
+const TIMED_EFFECTS = ['sunset', 'sunrise'];
+// Название на странице и название для платы (у переливания оно «on»)
+const EFFECT_TO_BOARD = { rainbow: 'on', wave: 'wave', fire: 'fire', candle: 'candle', sunset: 'sunset', sunrise: 'sunrise',
+                          storm: 'storm', ocean: 'ocean', lava: 'lava', heart: 'heart', garland: 'garland', police: 'police',
+                          warm: 'warm', cold: 'cold', neon: 'neon', pastel: 'pastel' };
+let flowSec = 3;    // время одного шага, секунды (у обычных эффектов)
+let flowMin = 10;   // общая длительность, минуты (у заката и рассвета)
 let lastAction = 0;
 let inflight = false;
 let queued = {};
 let urgent = false;         // команда от кнопки: отправляем сразу, без ожидания паузы между запросами
 let stateLoaded = false;    // состояние лампы прочитано хотя бы раз
+
+// ---------- Кнопки включения ----------
+// Состояние хранится в data-on, а подпись и цвет кнопки меняются вместе с ним
+
+function isOn(id) { return $(id).dataset.on === '1'; }
+
+function setOn(id, on) {
+  const b = $(id);
+  b.dataset.on = on ? '1' : '0';
+  b.classList.toggle('on', on);
+  b.textContent = id === 'power' ? (on ? 'Основной свет: включён' : 'Основной свет: выключен')
+                                 : (on ? 'Подсветка: включена' : 'Подсветка: выключена');
+}
 
 // ---------- Сворачиваемые блоки ----------
 
@@ -136,30 +228,44 @@ function setStatus(ok) {
   s.className = ok ? '' : 'bad';
 }
 
-function effect() {  // off, rainbow, wave или fire
+function effect() {  // off или название эффекта
   const b = document.querySelector('#bg_effect button.on');
   return b ? b.dataset.v : 'off';
 }
 function setEffect(v) {
   document.querySelectorAll('#bg_effect button[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  applyFlowSlider();
 }
 function flowOn() { return effect() !== 'off'; }
+function usesColor() { return COLOR_EFFECTS.includes(effect()); }
+function isTimed() { return TIMED_EFFECTS.includes(effect()); }
+function isPalette() { return PALETTE_EFFECTS.includes(effect()); }
+
+// Ползунок времени: у заката и рассвета это длительность в минутах, у остальных время одного шага в секундах
+function applyFlowSlider() {
+  const t = isTimed();
+  $('flow_s').max = t ? 30 : 20;
+  $('flow_s').value = t ? flowMin : flowSec;
+  $('flow_name').textContent = t ? 'Длительность' : 'Время одного шага';
+  suffix.flow_s = t ? ' мин' : ' с';
+  updateLabel('flow_s');
+}
 
 // Параметры запуска эффекта: цвета лампа крутит сама.
-// Переливанию и костру нужны скорость и яркость, волне ещё и цвет.
+// Всем нужны скорость и яркость, волне и сердцебиению ещё и цвет.
 function flowParams() {
-  const modes = { rainbow: 'on', wave: 'wave', fire: 'fire' };
-  const p = { bg_flow: modes[effect()], flow_ms: $('flow_s').value * 1000, bg_bright: $('bg_bright').value };
-  if (effect() === 'wave') { p.hue = $('hue').value; p.sat = $('sat').value; }
+  const p = { bg_flow: EFFECT_TO_BOARD[effect()], flow_ms: $('flow_s').value * (isTimed() ? 60000 : 1000),
+              bg_bright: $('bg_bright').value };
+  if (usesColor()) { p.hue = $('hue').value; p.sat = $('sat').value; }
+  if (isPalette()) p.swing = $('swing').value;
   return p;
 }
 
 function updateSwatch() {
   const col = hsvCss(+$('hue').value, +$('sat').value);
   const e = effect();
-  $('swatch').style.background = e === 'rainbow' ? FLOW_GRADIENT
-    : e === 'fire' ? FIRE_GRADIENT
-    : e === 'wave' ? 'linear-gradient(90deg,#000,' + col + ',#000)' : col;
+  $('swatch').style.background = SWATCHES[e]
+    || (COLOR_EFFECTS.includes(e) ? 'linear-gradient(90deg,#000,' + col + ',#000)' : col);
 }
 
 function updateLabel(id) {
@@ -206,6 +312,8 @@ let timer = null;
 let syncAfterSend = false;  // после команды читаем состояние лампы: 'lock' — ещё и цвет, 'state' — только переключатели
 
 function queue(params, now) {
+  // Любая другая команда подсветке отменяет таймер сна на лампе, значит, и обратный отсчёт на странице
+  if (!('bg_sleep' in params) && ['hue', 'bg_flow', 'bg_bright', 'bg_power'].some(k => k in params)) sleepEnd = 0;
   Object.assign(queued, params);
   lastAction = Date.now();
   if (now) urgent = true;
@@ -266,7 +374,13 @@ $('bg_effect').addEventListener('click', e => {
   if (!b || b.dataset.v === effect()) return;
   setEffect(b.dataset.v);
   updateSwatch();
+  if (flowOn()) setOn('bg_power', true);  // эффект сам включает подсветку
   queue(flowOn() ? flowParams() : { bg_flow: 'off' }, true);
+});
+
+$('swing').addEventListener('input', () => {
+  updateLabel('swing');
+  if (isPalette()) queue(flowParams());
 });
 
 // Пока эффект включён, яркость меняем, перезапуская его с новой яркостью
@@ -288,6 +402,7 @@ $('bg_lock').addEventListener('click', () => {
 });
 
 $('flow_s').addEventListener('input', () => {
+  if (isTimed()) flowMin = +$('flow_s').value; else flowSec = +$('flow_s').value;
   updateLabel('flow_s');
   if (flowOn()) queue(flowParams());
 });
@@ -295,7 +410,7 @@ $('flow_s').addEventListener('input', () => {
 // Ручной выбор цвета выключает переливание и костёр; волна при этом просто меняет цвет.
 // Яркость отправляем вместе с цветом: сервер выходит из эффекта одной командой.
 function leaveRainbow() {
-  if (effect() === 'off' || effect() === 'wave') return {};
+  if (effect() === 'off' || usesColor()) return {};
   setEffect('off');
   return { bg_flow: 'off', bg_bright: $('bg_bright').value };
 }
@@ -310,7 +425,7 @@ function leaveRainbow() {
       updateLabel('sat');
     }
     updateLabel(id);
-    queue(effect() === 'wave' ? flowParams() : Object.assign({ hue: $('hue').value, sat: $('sat').value }, stop));
+    queue(usesColor() ? flowParams() : Object.assign({ hue: $('hue').value, sat: $('sat').value }, stop));
   });
 });
 
@@ -318,16 +433,37 @@ $('white').addEventListener('click', () => {
   const stop = leaveRainbow();
   $('sat').value = 0;
   updateLabel('sat');
-  queue(effect() === 'wave' ? flowParams() : Object.assign({ hue: $('hue').value, sat: 0 }, stop), true);
+  queue(usesColor() ? flowParams() : Object.assign({ hue: $('hue').value, sat: 0 }, stop), true);
 });
 
-$('power').addEventListener('change', () => {
-  syncAfterSend = 'state';  // проверяем, как лампа на самом деле отреагировала: оба переключателя берём из её ответа
-  queue({ power: $('power').checked ? 'on' : 'off' }, true);
+// Что отправить, чтобы вернуть подсветку в нынешнее состояние: таймер сна, эффект или обычный цвет
+function restoreBgParams() {
+  const color = { hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value };
+  if (sleepEnd > Date.now()) {
+    return Object.assign({ bg_sleep: Math.max(1, Math.ceil((sleepEnd - Date.now()) / 60000)) }, color);
+  }
+  if (flowOn()) return flowParams();
+  return Object.assign({ bg_power: 'on' }, color);
+}
+
+$('power').addEventListener('click', () => {
+  const on = !isOn('power');
+  setOn('power', on);
+  syncAfterSend = 'state';  // проверяем, как лампа на самом деле отреагировала: обе кнопки берём из её ответа
+  const params = { power: on ? 'on' : 'off' };
+  // Эта лампа включает и выключает оба света сразу, отдельной команды для основного света у неё нет.
+  // Поэтому состояние подсветки сразу восстанавливаем следующей командой.
+  if (isOn('bg_power')) {
+    if (!on) Object.assign(params, restoreBgParams());  // основной погас вместе с подсветкой: возвращаем подсветку
+  } else if (on) {
+    params.bg_power = 'off';  // основной включился вместе с подсветкой, а она была выключена
+  }
+  queue(params, true);
 });
 
-$('bg_power').addEventListener('change', () => {
-  const on = $('bg_power').checked;
+$('bg_power').addEventListener('click', () => {
+  const on = !isOn('bg_power');
+  setOn('bg_power', on);
   if (!on) {
     setEffect('off');
     updateSwatch();
@@ -344,7 +480,8 @@ $('bg_power').addEventListener('change', () => {
 // ---------- Состояние лампы ----------
 
 let refreshing = false;
-const EFFECT_FROM_BOARD = { on: 'rainbow', wave: 'wave', fire: 'fire' };
+const EFFECT_FROM_BOARD = { warm: 'warm', cold: 'cold', neon: 'neon', pastel: 'pastel', on: 'rainbow', wave: 'wave', fire: 'fire', candle: 'candle', sunset: 'sunset', sunrise: 'sunrise',
+                            storm: 'storm', ocean: 'ocean', lava: 'lava', heart: 'heart', garland: 'garland', police: 'police' };
 
 // force — не ждать паузы после действий; applyColor — ещё и поставить ползунки цвета на цвет лампы
 function refresh(force, applyColor) {
@@ -357,9 +494,9 @@ function refresh(force, applyColor) {
       setStatus(j.ok);
       if (!j.ok) return;
       if (!force && lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
-      $('power').checked = (j.power === 'on');
-      $('bg_power').checked = (j.bg_power === 'on');
-      if (!stateLoaded) {  // переключатели ждут первого ответа лампы, чтобы не показывать выдуманное состояние
+      setOn('power', j.power === 'on');
+      setOn('bg_power', j.bg_power === 'on');
+      if (!stateLoaded) {  // кнопки включения ждут первого ответа лампы, чтобы не показывать выдуманное состояние
         stateLoaded = true;
         $('power').disabled = false;
         $('bg_power').disabled = false;
@@ -368,13 +505,24 @@ function refresh(force, applyColor) {
       let flowing = false;
       if (j.bg_flow === '0') {
         setEffect('off');
+        sleepEnd = 0;
+        renderSleep();
+      } else if (j.bg_flow === '1' && j.effect === 'sleep') {
+        flowing = true;  // идёт таймер сна: эффекта нет, но есть обратный отсчёт
+        setEffect('off');
+        if (j.sleep_left > 0) { sleepEnd = Date.now() + j.sleep_left * 1000; renderSleep(); }
       } else if (j.bg_flow === '1') {
         flowing = true;
         const known = EFFECT_FROM_BOARD[j.effect];
         setEffect(known || 'rainbow');
+        if (known && j.swing !== undefined) {
+          $('swing').value = j.swing;
+          updateLabel('swing');
+        }
         if (known && j.flow_ms) {
-          $('flow_s').value = Math.min(20, Math.max(1, Math.round(j.flow_ms / 1000)));
-          updateLabel('flow_s');
+          if (TIMED_EFFECTS.includes(known)) flowMin = Math.min(30, Math.max(1, Math.round(j.flow_ms / 60000)));
+          else flowSec = Math.min(20, Math.max(1, Math.round(j.flow_ms / 1000)));
+          applyFlowSlider();
         }
       }
       ['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(id => {
@@ -383,7 +531,7 @@ function refresh(force, applyColor) {
         if (!skip && j[id] !== undefined) $(id).value = j[id];
         updateLabel(id);
       });
-      if (flowing && effect() === 'wave' && j.effect === 'wave') {
+      if (flowing && usesColor() && j.effect === effect()) {
         $('hue').value = j.fhue;
         $('sat').value = j.fsat;
         updateLabel('hue');
@@ -466,7 +614,127 @@ $('reboot').addEventListener('click', () => {
   setTimeout(() => location.reload(), 10000);
 });
 
-['bright', 'ct', 'bg_bright', 'hue', 'sat', 'flow_s'].forEach(updateLabel);
+// ---------- Таймер сна ----------
+
+let sleepEnd = 0;  // когда подсветка погаснет (по часам страницы), 0 — таймер не идёт
+
+function renderSleep() {
+  const left = sleepEnd ? Math.round((sleepEnd - Date.now()) / 1000) : 0;
+  if (left <= 0) {
+    if (sleepEnd) {  // время вышло: через пару секунд сверяем переключатели с лампой
+      sleepEnd = 0;
+      setTimeout(() => refresh(true), 2500);
+    }
+    $('sleep_note').textContent = '';
+    return;
+  }
+  const m = Math.floor(left / 60), s = left % 60;
+  $('sleep_note').textContent = 'гаснет через ' + (m ? m + ' мин ' : '') + s + ' с';
+}
+setInterval(renderSleep, 1000);
+
+$('sleep_m').addEventListener('input', () => updateLabel('sleep_m'));
+
+$('sleep_go').addEventListener('click', () => {
+  const m = +$('sleep_m').value;
+  setEffect('off');
+  updateSwatch();
+  setOn('bg_power', true);
+  queue({ bg_sleep: m, hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value }, true);
+  sleepEnd = Date.now() + m * 60000;
+  renderSleep();
+});
+
+// Отмена возвращает подсветку на цвет и яркость с ползунков
+$('sleep_stop').addEventListener('click', () => {
+  if (!sleepEnd) return;
+  queue({ bg_flow: 'off', hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value }, true);
+  renderSleep();
+});
+
+// ---------- Сцены ----------
+
+const SCENE_MAX = 8;
+let scenes = [];
+
+function sceneNote(text) { $('scene_note').textContent = text || ''; }
+
+// Данные с платы проверяем и приводим к допустимым значениям: страница не должна ломаться от кривой записи
+function cleanScene(x) {
+  if (!x || typeof x.n !== 'string') return null;
+  const num = (v, lo, hi, d) => { v = +v; return isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
+  const known = x.e === 'off' || Object.prototype.hasOwnProperty.call(EFFECT_TO_BOARD, x.e);
+  return { n: x.n.slice(0, 20), e: known ? x.e : 'off', h: num(x.h, 0, 359, 0), s: num(x.s, 0, 100, 100),
+           b: num(x.b, 1, 100, 100), fs: num(x.fs, 1, 20, 3), fm: num(x.fm, 1, 30, 10), w: num(x.w, 0, 90, 0) };
+}
+
+function renderScenes() {
+  const box = $('scene_list');
+  box.textContent = '';
+  scenes.forEach((sc, i) => {
+    const row = document.createElement('div');
+    row.className = 'scene';
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'go';
+    go.textContent = sc.n;
+    go.addEventListener('click', () => applyScene(sc));
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'del';
+    del.textContent = '✕';
+    del.title = 'Удалить';
+    del.addEventListener('click', () => { scenes.splice(i, 1); renderScenes(); saveScenes(); });
+    row.append(go, del);
+    box.append(row);
+  });
+  sceneNote(scenes.length ? '' : 'Сохранённых сцен пока нет');
+}
+
+function saveScenes() {
+  return fetch('/api/scenes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scenes) })
+    .then(r => r.json())
+    .then(j => { if (!j.ok) throw new Error('save'); })
+    .catch(() => sceneNote('не удалось сохранить сцены на плате'));
+}
+
+function loadScenes() {
+  fetchJson('/api/scenes', 8000)
+    .then(a => { scenes = (Array.isArray(a) ? a : []).map(cleanScene).filter(Boolean).slice(0, SCENE_MAX); renderScenes(); })
+    .catch(() => { sceneNote('не удалось прочитать сцены, пробую снова'); setTimeout(loadScenes, 5000); });
+}
+
+// Включить сцену: цвет, яркость, эффект и скорость ставятся одной командой
+function applyScene(sc) {
+  $('hue').value = sc.h;
+  $('sat').value = sc.s;
+  $('bg_bright').value = sc.b;
+  $('swing').value = sc.w;
+  flowSec = sc.fs;
+  flowMin = sc.fm;
+  setEffect(sc.e);  // заодно ставит ползунок времени
+  ['hue', 'sat', 'bg_bright', 'swing'].forEach(updateLabel);
+  updateSwatch();
+  setOn('bg_power', true);
+  queue(flowOn() ? flowParams() : { bg_power: 'on', hue: sc.h, sat: sc.s, bg_bright: sc.b }, true);
+}
+
+$('scene_save').addEventListener('click', () => {
+  const name = $('scene_name').value.trim().slice(0, 20);
+  if (!name) { sceneNote('введите название сцены'); return; }
+  const sc = { n: name, e: effect(), h: +$('hue').value, s: +$('sat').value, b: +$('bg_bright').value,
+               fs: flowSec, fm: flowMin, w: +$('swing').value };
+  const i = scenes.findIndex(x => x.n === name);
+  if (i >= 0) scenes[i] = sc;  // то же название: заменяем
+  else if (scenes.length >= SCENE_MAX) { sceneNote('можно хранить до ' + SCENE_MAX + ' сцен, удалите ненужную'); return; }
+  else scenes.push(sc);
+  $('scene_name').value = '';
+  renderScenes();
+  saveScenes();
+});
+
+['bright', 'ct', 'bg_bright', 'hue', 'sat', 'flow_s', 'swing', 'sleep_m'].forEach(updateLabel);
+loadScenes();
 refresh();
 setInterval(() => { if (!stateLoaded) refresh(); }, 3000);  // пока лампа не ответила, пробуем снова
 setInterval(refresh, 15000);
