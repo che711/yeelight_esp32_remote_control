@@ -17,6 +17,7 @@ int bgFlowMs = 3000;
 int bgFlowHue = 0;
 int bgFlowSat = 100;
 int bgFlowSwing = 0;       // размах яркости у переливаний, в процентах
+int mainSaved = 70;        // яркость основного света до приглушения: к ней возвращаемся
 uint32_t sleepEndMs = 0;   // когда по времени платы подсветка погаснет по таймеру сна (нужно только чтобы показать остаток)
 
 // Занятость сервера: какую долю времени за последние 10 секунд плата обрабатывала запросы
@@ -27,12 +28,11 @@ uint8_t busyPct = 0;
 // ---------- Связь с лампой ----------
 
 // Отправляет одну команду лампе, возвращает первую строку ответа
-String sendCmd(const String &method, const String &params, uint32_t gapMs = 1000) {
+String sendCmd(const String &method, const String &params) {
   // Лампа принимает около 60 команд в минуту, иначе замолкает на минуту и дольше.
-  // Обычно держим паузу не меньше 1 секунды между командами; короткая пауза нужна только для пары
-  // «выключить основной свет — вернуть подсветку», такая пара не сбивает минутный счёт.
+  // Держим паузу не меньше 1 секунды между командами.
   static uint32_t lastCmd = 0;
-  while (lastCmd != 0 && millis() - lastCmd < gapMs) delay(10);
+  while (lastCmd != 0 && millis() - lastCmd < 1000) delay(20);
   lastCmd = millis();
 
   WiFiClient c;
@@ -116,6 +116,8 @@ void handleState() {
   // У этой лампы «power» показывает «включено», если горит хоть один из двух светов (основной или подсветка).
   // Состояние именно основного света отдаёт «main_power»; если лампа его не вернула, берём «power».
   String mainPower = (n >= 10 && v[9].length() > 0) ? v[9] : v[0];
+  int mainBr = v[1].toInt();
+  if (mainBr > 1) mainSaved = mainBr;  // пока свет не приглушён, запоминаем его яркость
   j += ",\"power\":\"" + mainPower + "\"";
   j += ",\"bright\":" + String(v[1].toInt());
   j += ",\"ct\":" + String(v[2].toInt());
@@ -130,6 +132,7 @@ void handleState() {
   j += ",\"fhue\":" + String(bgFlowHue);
   j += ",\"fsat\":" + String(bgFlowSat);
   j += ",\"swing\":" + String(bgFlowSwing);
+  j += ",\"main_saved\":" + String(mainSaved);
   int32_t sleepLeft = (bgEffect == "sleep") ? (int32_t)(sleepEndMs - millis()) / 1000 : 0;  // секунд до выключения
   j += ",\"sleep_left\":" + String(sleepLeft > 0 ? sleepLeft : 0);
   j += "}";
@@ -327,26 +330,30 @@ String buildFlow(const FlowDef &d, long baseMs, int br, unsigned long userRgb, i
 void handleSet() {
   bool allOk = true;
   bool lampSilent = false;  // лампа не ответила совсем: остальные команды пробовать нет смысла
-  uint32_t nextGap = 1000;  // пауза перед следующей командой, мс
   auto run = [&](const String &method, const String &params) {
     if (lampSilent) { allOk = false; return; }
-    String reply = sendCmd(method, params, nextGap);
-    nextGap = 1000;
+    String reply = sendCmd(method, params);
     if (reply.length() == 0) lampSilent = true;
     if (!replyOk(reply)) allOk = false;
   };
 
   if (server.hasArg("power")) {
     run("set_power", String("[\"") + (server.arg("power") == "on" ? "on" : "off") + "\",\"smooth\",300]");
-    // Лампа гасит оба света сразу, а страница тут же просит вернуть подсветку: не ждём лишнего,
-    // чтобы подсветка была выключена как можно меньше
-    if (server.arg("power") != "on" &&
-        (server.hasArg("bg_power") || server.hasArg("bg_flow") || server.hasArg("bg_sleep"))) {
-      nextGap = 250;
+  }
+  // Основной свет не выключаем: лампа выключает оба света сразу. Вместо этого приглушаем его до минимума
+  // (main=dim) и возвращаем прежнюю яркость (main=restore).
+  if (server.hasArg("main")) {
+    if (server.arg("main") == "dim") {
+      int saved = server.arg("main_save").toInt();
+      if (saved > 1) mainSaved = constrain(saved, 2, 100);
+      run("set_bright", "[1,\"smooth\",300]");
+    } else {
+      run("set_bright", "[" + String(mainSaved) + ",\"smooth\",300]");
     }
   }
   if (server.hasArg("bright")) {
     int v = constrain(server.arg("bright").toInt(), 1, 100);
+    if (v > 1) mainSaved = v;
     run("set_bright", "[" + String(v) + ",\"smooth\",150]");
   }
   if (server.hasArg("ct")) {
