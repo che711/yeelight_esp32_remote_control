@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
+#include <map>
 #include "config.h"
 #include "index_html.h"
 
@@ -327,7 +328,23 @@ String buildFlow(const FlowDef &d, long baseMs, int br, unsigned long userRgb, i
   return f;
 }
 
-void handleSet() {
+// Параметры команды: обычно из запроса, а при включении сцены по названию (/api/scene) их собирает сама плата
+std::map<String, String> argOverlay;
+bool useOverlay = false;
+
+bool hasA(const char *key) {
+  return useOverlay ? argOverlay.count(String(key)) > 0 : server.hasArg(key);
+}
+
+String getA(const char *key) {
+  if (!useOverlay) return server.arg(key);
+  auto it = argOverlay.find(String(key));
+  return it == argOverlay.end() ? String("") : it->second;
+}
+
+// Применяет параметры к лампе и возвращает true, если все команды прошли. Параметры берутся из запроса
+// (/api/set?...) или, для сцены по названию, из argOverlay
+bool applySet() {
   bool allOk = true;
   bool lampSilent = false;  // лампа не ответила совсем: остальные команды пробовать нет смысла
   auto run = [&](const String &method, const String &params) {
@@ -337,42 +354,42 @@ void handleSet() {
     if (!replyOk(reply)) allOk = false;
   };
 
-  if (server.hasArg("power")) {
-    run("set_power", String("[\"") + (server.arg("power") == "on" ? "on" : "off") + "\",\"smooth\",300]");
+  if (hasA("power")) {
+    run("set_power", String("[\"") + (getA("power") == "on" ? "on" : "off") + "\",\"smooth\",300]");
   }
   // Основной свет не выключаем: лампа выключает оба света сразу. Вместо этого приглушаем его до минимума
   // (main=dim) и возвращаем прежнюю яркость (main=restore).
-  if (server.hasArg("main")) {
-    if (server.arg("main") == "dim") {
-      int saved = server.arg("main_save").toInt();
+  if (hasA("main")) {
+    if (getA("main") == "dim") {
+      int saved = getA("main_save").toInt();
       if (saved > 1) mainSaved = constrain(saved, 2, 100);
       run("set_bright", "[1,\"smooth\",300]");
     } else {
       run("set_bright", "[" + String(mainSaved) + ",\"smooth\",300]");
     }
   }
-  if (server.hasArg("bright")) {
-    int v = constrain(server.arg("bright").toInt(), 1, 100);
+  if (hasA("bright")) {
+    int v = constrain(getA("bright").toInt(), 1, 100);
     if (v > 1) mainSaved = v;
     run("set_bright", "[" + String(v) + ",\"smooth\",150]");
   }
-  if (server.hasArg("ct")) {
-    int v = constrain(server.arg("ct").toInt(), 2700, 6500);
+  if (hasA("ct")) {
+    int v = constrain(getA("ct").toInt(), 2700, 6500);
     run("set_ct_abx", "[" + String(v) + ",\"smooth\",150]");
   }
   bool bgDone = false;  // подсветка уже получила цвет и яркость вместе с включением
-  if (server.hasArg("bg_power") || server.hasArg("bg_flow") || server.hasArg("hue") || server.hasArg("bg_bright") ||
-      server.hasArg("bg_sleep")) {
+  if (hasA("bg_power") || hasA("bg_flow") || hasA("hue") || hasA("bg_bright") ||
+      hasA("bg_sleep")) {
     sleepEndMs = 0;
     bgEffect = "off";  // любая из этих команд останавливает эффект на лампе; запуск эффекта ниже запишет его заново
   }
-  if (server.hasArg("bg_power")) {
-    if (server.arg("bg_power") == "on") {
+  if (hasA("bg_power")) {
+    if (getA("bg_power") == "on") {
       // Команда bg_set_power on у этой лампы отвечает «ok», но подсветку не включает.
       // Поэтому включаем сценой: она сама включает подсветку и задаёт цвет и яркость.
-      int hue = server.hasArg("hue") ? constrain(server.arg("hue").toInt(), 0, 359) : 0;
-      int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
-      int br  = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
+      int hue = hasA("hue") ? constrain(getA("hue").toInt(), 0, 359) : 0;
+      int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
+      int br  = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;
       run("bg_set_scene", "[\"hsv\"," + String(hue) + "," + String(sat) + "," + String(br) + "]");
       bgDone = true;
       // Проверяем, что подсветка правда включилась; если нет, переключаем командой bg_toggle
@@ -394,17 +411,17 @@ void handleSet() {
   //   bg_flow=<имя>   — эффекты из таблицы выше (свеча, закат, рассвет, гроза, океан, лава,
   //                     сердцебиение, гирлянда, мигалка)
   //   bg_flow=off     — остановить эффект
-  if (server.hasArg("bg_flow")) {
-    String mode = server.arg("bg_flow");
+  if (hasA("bg_flow")) {
+    String mode = getA("bg_flow");
     const FlowDef *def = findFlow(mode);
     if (mode == "on" || mode == "wave" || mode == "fire" || def) {
-      long flowMs = server.arg("flow_ms").toInt();
+      long flowMs = getA("flow_ms").toInt();
       int stepMs = constrain(flowMs, 500, 30000);            // время одного шага
       long totalMs = constrain(flowMs, 10000L, 3600000L);    // общая длительность заката и рассвета
-      int br = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
-      int hue = server.hasArg("hue") ? constrain(server.arg("hue").toInt(), 0, 359) : 0;
-      int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
-      int swing = server.hasArg("swing") ? constrain(server.arg("swing").toInt(), 0, 90) : 0;
+      int br = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;
+      int hue = hasA("hue") ? constrain(getA("hue").toInt(), 0, 359) : 0;
+      int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
+      int swing = hasA("swing") ? constrain(getA("swing").toInt(), 0, 90) : 0;
       String flow = "";
       int count = 0;   // 0 — крутить бесконечно
       int action = 1;  // что делать после остановки: 1 — остаться на текущем цвете, 2 — погасить
@@ -449,12 +466,12 @@ void handleSet() {
         bgFlowSat = sat;
       }
       bgFlowSwing = swing;
-    } else if (server.hasArg("hue")) {
+    } else if (hasA("hue")) {
       // Выход из эффекта сразу в нужный цвет: одна сцена вместо «остановить» + «задать цвет».
       // Так цвет меняется на секунду раньше: лампе нельзя слать команды чаще раза в секунду.
-      int hue = constrain(server.arg("hue").toInt(), 0, 359);
-      int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
-      int br  = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
+      int hue = constrain(getA("hue").toInt(), 0, 359);
+      int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
+      int br  = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;
       run("bg_set_scene", "[\"hsv\"," + String(hue) + "," + String(sat) + "," + String(br) + "]");
       bgDone = true;
     } else {
@@ -463,11 +480,11 @@ void handleSet() {
   }
   // Таймер сна: подсветка за N минут плавно гаснет. Считает сама лампа: цепочка из двух шагов
   // (сначала текущий цвет и яркость, потом медленное затухание до минимума) и действие «выключить» в конце.
-  if (server.hasArg("bg_sleep")) {
-    int minutes = constrain(server.arg("bg_sleep").toInt(), 1, 240);
-    int hue = server.hasArg("hue") ? constrain(server.arg("hue").toInt(), 0, 359) : 0;
-    int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
-    int br  = server.hasArg("bg_bright") ? constrain(server.arg("bg_bright").toInt(), 1, 100) : 100;
+  if (hasA("bg_sleep")) {
+    int minutes = constrain(getA("bg_sleep").toInt(), 1, 240);
+    int hue = hasA("hue") ? constrain(getA("hue").toInt(), 0, 359) : 0;
+    int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
+    int br  = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;
     long ms = minutes * 60000L;
     String rgb = String(hsvToRgb(hue, sat));
     String flow = String("50,1,") + rgb + "," + String(br) + "," + String(ms) + ",1," + rgb + ",1";
@@ -476,17 +493,83 @@ void handleSet() {
     bgEffect = "sleep";
     sleepEndMs = millis() + (uint32_t)ms;
   }
-  if (server.hasArg("bg_bright") && !bgDone) {
-    int v = constrain(server.arg("bg_bright").toInt(), 1, 100);
+  if (hasA("bg_bright") && !bgDone) {
+    int v = constrain(getA("bg_bright").toInt(), 1, 100);
     run("bg_set_bright", "[" + String(v) + ",\"smooth\",150]");
   }
-  if (server.hasArg("hue") && !bgDone) {
-    int hue = constrain(server.arg("hue").toInt(), 0, 359);
-    int sat = server.hasArg("sat") ? constrain(server.arg("sat").toInt(), 0, 100) : 100;
+  if (hasA("hue") && !bgDone) {
+    int hue = constrain(getA("hue").toInt(), 0, 359);
+    int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
     run("bg_set_hsv", "[" + String(hue) + "," + String(sat) + ",\"smooth\",150]");
   }
 
-  server.send(200, "application/json", allOk ? "{\"ok\":true}" : "{\"ok\":false}");
+  return allOk;
+}
+
+void handleSet() {
+  bool ok = applySet();
+  server.send(200, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
+}
+
+// Достаёт из записи сцены число и строку по имени поля
+long sceneNum(const String &obj, const char *key, long def) {
+  int i = obj.indexOf(String("\"") + key + "\":");
+  if (i < 0) return def;
+  i += strlen(key) + 3;
+  int j = i;
+  while (j < (int)obj.length() && obj[j] != ',' && obj[j] != '}') j++;
+  return obj.substring(i, j).toInt();
+}
+
+String sceneStr(const String &obj, const char *key) {
+  String tag = String("\"") + key + "\":\"";
+  int i = obj.indexOf(tag);
+  if (i < 0) return "";
+  i += tag.length();
+  int j = obj.indexOf('"', i);
+  return j < 0 ? String("") : obj.substring(i, j);
+}
+
+// Включает сохранённую сцену по названию: curl "http://адрес/api/scene?name=Вечер"
+void handleScene() {
+  String name = server.arg("name");
+  String list = prefs.getString("scenes", "[]");
+  int at = name.length() ? list.indexOf(String("\"n\":\"") + name + "\"") : -1;
+  if (at < 0) {
+    server.send(404, "application/json", "{\"ok\":false,\"error\":\"scene not found\"}");
+    return;
+  }
+  String obj = list.substring(list.lastIndexOf('{', at), list.indexOf('}', at) + 1);
+  String e = sceneStr(obj, "e");
+  int hue = constrain(sceneNum(obj, "h", 0), 0, 359);
+  int sat = constrain(sceneNum(obj, "s", 100), 0, 100);
+  int br = constrain(sceneNum(obj, "b", 100), 1, 100);
+  long fs = constrain(sceneNum(obj, "fs", 3), 1, 20);
+  long fm = constrain(sceneNum(obj, "fm", 10), 1, 30);
+  int w = constrain(sceneNum(obj, "w", 0), 0, 90);
+
+  // Те же параметры, что отправляет страница при включении сцены
+  argOverlay.clear();
+  argOverlay["bg_bright"] = String(br);
+  if (e == "off" || e.length() == 0) {
+    argOverlay["bg_power"] = "on";
+    argOverlay["hue"] = String(hue);
+    argOverlay["sat"] = String(sat);
+  } else {
+    bool timed = (e == "sunset" || e == "sunrise");
+    argOverlay["bg_flow"] = (e == "rainbow") ? String("on") : e;
+    argOverlay["flow_ms"] = String(timed ? fm * 60000L : fs * 1000L);
+    if (e == "wave" || e == "heart") {
+      argOverlay["hue"] = String(hue);
+      argOverlay["sat"] = String(sat);
+    }
+    if (e == "rainbow" || e == "warm" || e == "cold" || e == "neon" || e == "pastel") argOverlay["swing"] = String(w);
+  }
+  useOverlay = true;
+  bool ok = applySet();
+  useOverlay = false;
+  argOverlay.clear();
+  server.send(200, "application/json", String("{\"ok\":") + (ok ? "true" : "false") + ",\"scene\":\"" + jsonEscape(name) + "\"}");
 }
 
 // ---------- Wi-Fi ----------
@@ -553,6 +636,7 @@ void setup() {
   server.on("/api/state", HTTP_GET, handleState);
   server.on("/api/set", HTTP_GET, handleSet);
   server.on("/api/system", HTTP_GET, handleSystem);
+  server.on("/api/scene", HTTP_GET, handleScene);
   server.on("/api/scenes", HTTP_GET, handleScenesGet);
   server.on("/api/scenes", HTTP_POST, handleScenesPost);
   server.on("/api/reboot", HTTP_POST, handleReboot);
