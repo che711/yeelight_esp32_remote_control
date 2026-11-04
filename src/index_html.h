@@ -113,7 +113,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 </head>
 <body>
 <main>
-  <h1>Лампа Yeelight</h1>
+  <h1>Yeelight Screen Light Bar Pro YLTD003</h1>
   <div id="strip"></div>
   <div id="status">читаю состояние лампы…</div>
 
