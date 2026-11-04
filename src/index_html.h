@@ -7,81 +7,127 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Лампа</title>
 <style>
-  :root { color-scheme: dark; --bg:#14161a; --card:#1e2127; --line:#2c3038; --text:#e8eaed; --dim:#8b919a; --accent:#f5a623; }
+  /* Свет страницы берётся у самой лампы: --glow — цвет, которым сейчас горит подсветка */
+  @property --glow { syntax:'<color>'; inherits:true; initial-value:#6b7cff; }
+  :root { color-scheme: dark; --bg:#0d0f24; --text:#f4f5ff; --dim:#a3a9d6; --line:rgba(255,255,255,.13);
+          --field:rgba(255,255,255,.07); --accent:#ffb02e;
+          --glow-grad:linear-gradient(90deg,#2a2f55,#4a5170,#2a2f55); --hue-solid:#f00;
+          transition:--glow .9s ease; }
+  @media (prefers-reduced-motion: reduce) { :root { transition:none; } }
   * { box-sizing: border-box; }
-  body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:16px/1.4 system-ui,sans-serif; }
+  html { background:var(--bg); }
+  body { margin:0; padding:18px 16px 44px; min-height:100vh; color:var(--text);
+         font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg);
+         background:radial-gradient(80% 52% at 50% -8%, color-mix(in srgb, var(--glow) 46%, transparent), transparent 72%) no-repeat fixed, var(--bg); }
   main { max-width:480px; margin:0 auto; }
-  h1 { font-size:20px; margin:4px 0 4px; }
-  #status { font-size:13px; color:var(--dim); margin-bottom:14px; }
-  #status.bad { color:#ff6b6b; }
-  details.card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:14px; }
-  details.card > summary { font-size:15px; color:var(--dim); font-weight:600; cursor:pointer; list-style:none; user-select:none; }
+  h1 { font-size:28px; font-weight:800; letter-spacing:-.02em; margin:2px 0 8px; }
+  #strip { height:6px; border-radius:3px; background:var(--glow-grad); box-shadow:0 0 26px 2px var(--glow); margin:0 0 10px; }
+  #status { font-size:13px; color:var(--dim); margin-bottom:16px; }
+  #status.bad { color:#ff7a8a; }
+
+  details.card { background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));
+                 border:1px solid var(--line); border-radius:18px; padding:16px 18px; margin-bottom:16px;
+                 box-shadow:0 18px 40px -28px var(--tone, var(--glow)); }
+  details.card > summary { display:flex; align-items:center; gap:10px; font-size:17px; font-weight:700;
+                           cursor:pointer; list-style:none; user-select:none; }
   details.card > summary::-webkit-details-marker { display:none; }
-  details.card > summary::before { content:'▾'; display:inline-block; width:1.3em; }
-  details.card:not([open]) > summary::before { content:'▸'; }
-  details.card[open] > summary { margin-bottom:10px; }
-  .row { display:flex; justify-content:space-between; align-items:center; margin:12px 0 6px; }
-  .row b { color:var(--accent); font-weight:600; }
-  input[type=range] { width:100%; height:28px; accent-color:var(--accent); }
-  #hue { -webkit-appearance:none; appearance:none; height:14px; border-radius:7px; margin:6px 0;
-         background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00); }
-  #hue::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:#fff; border:2px solid #000; }
-  #hue::-moz-range-thumb { width:22px; height:22px; border-radius:50%; background:#fff; border:2px solid #000; }
-  .pwr { width:100%; margin:4px 0 8px; padding:12px; border:1px solid var(--line); border-radius:10px;
-         background:#2a2e36; color:var(--dim); font:inherit; font-weight:600; cursor:pointer; }
-  .pwr.on { background:var(--accent); border-color:var(--accent); color:#000; }
-  .pwr:disabled { opacity:.5; cursor:default; }
-  #swatch { width:100%; height:10px; border-radius:5px; margin-top:10px; }
-  #white { margin-top:10px; padding:8px 18px; border:1px solid var(--line); border-radius:8px;
-           background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
-  #white:active { background:var(--accent); color:#000; }
-  .seg { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 6px; }
-  .seg button { flex:1 1 30%; padding:9px 6px; border:1px solid var(--line); border-radius:8px;
-                background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
-  .seg button:active { background:var(--accent); border-color:var(--accent); color:#000; }
-  .seg button.on { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
-  .kv { display:flex; justify-content:space-between; gap:12px; margin:8px 0 2px; font-size:14px; }
+  details.card > summary::before { content:''; width:10px; height:10px; border-radius:50%;
+                                   background:var(--tone, var(--glow)); box-shadow:0 0 12px var(--tone, var(--glow)); }
+  details.card > summary::after { content:'▾'; margin-left:auto; color:var(--dim); }
+  details.card:not([open]) > summary::after { content:'▸'; }
+  details.card[open] > summary { margin-bottom:12px; }
+
+  .row { display:flex; justify-content:space-between; align-items:center; margin:14px 0 4px; }
+  .row b { color:var(--accent); font-weight:700; }
+
+  input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:16px; border-radius:8px; margin:8px 0;
+                      background:var(--track, linear-gradient(90deg,#2a2f5c,#8b7bff)); outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:26px; height:26px; border-radius:50%;
+        background:#fff; border:3px solid var(--glow); box-shadow:0 0 14px var(--glow), 0 2px 6px rgba(0,0,0,.5); }
+  input[type=range]::-moz-range-thumb { width:22px; height:22px; border-radius:50%;
+        background:#fff; border:3px solid var(--glow); box-shadow:0 0 14px var(--glow), 0 2px 6px rgba(0,0,0,.5); }
+  input[type=range]:focus-visible { outline:2px solid #fff; outline-offset:3px; }
+  #bright    { --track:linear-gradient(90deg,#2b2a3d,#fff1c9); }
+  #ct        { --track:linear-gradient(90deg,#ff9a3c,#fff2e0,#9ecbff); }
+  #bg_bright { --track:linear-gradient(90deg,#1c1f3f,var(--glow)); }
+  #sat       { --track:linear-gradient(90deg,#fff,var(--hue-solid)); }
+  #hue       { --track:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00); }
+  #flow_s    { --track:linear-gradient(90deg,#3de0c8,#ffd166); }
+  #swing     { --track:linear-gradient(90deg,#2a2f5c,#ff6bd6); }
+  #sleep_m   { --track:linear-gradient(90deg,#ffb347,#3a2a6b); }
+
+  .pwr { width:100%; margin:4px 0 10px; padding:14px; border:1px solid var(--line); border-radius:14px;
+         background:var(--field); color:var(--dim); font:inherit; font-weight:700; cursor:pointer;
+         transition:box-shadow .2s, background .2s; }
+  .pwr.on { background:linear-gradient(135deg,#ffd35c,#ff8a2a); border-color:transparent; color:#2a1400; box-shadow:0 0 26px -4px #ff9d2e; }
+  #bg_power.on { background:linear-gradient(135deg, color-mix(in srgb, var(--glow) 70%, #fff), var(--glow));
+                 color:#0b0c1e; box-shadow:0 0 28px -4px var(--glow); }
+  .pwr.dim { background:rgba(255,176,46,.14); border-color:var(--accent); color:var(--accent); }
+  .pwr.soft { padding:9px; font-weight:400; font-size:14px; margin-top:0; }
+  .pwr:disabled { opacity:.45; cursor:default; }
+
+  .seg { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 8px; }
+  .seg button { position:relative; overflow:hidden; flex:1 1 30%; padding:11px 6px 14px; border:1px solid var(--line);
+                border-radius:12px; background:var(--field); color:var(--text); font:inherit; font-size:14px; cursor:pointer;
+                transition:box-shadow .2s, border-color .2s; }
+  .seg button[data-v]:not([data-v="off"])::after { content:''; position:absolute; left:0; right:0; bottom:0; height:4px;
+                background:var(--sw, transparent); }
+  .seg button:active { background:rgba(255,255,255,.2); }
+  .seg button.on { background-image:linear-gradient(rgba(8,9,28,.55),rgba(8,9,28,.55)), var(--sw, linear-gradient(135deg,#ffd35c,#ff8a2a));
+                   color:#fff; font-weight:700; border-color:rgba(255,255,255,.8); text-shadow:0 1px 3px rgba(0,0,0,.7);
+                   box-shadow:0 0 20px -2px var(--glow); }
+  .seg button[data-v="off"].on { background-image:none; background:#2f3580; box-shadow:none; }
+
+  #swatch { width:100%; height:12px; border-radius:6px; margin-top:12px; box-shadow:0 0 18px -4px var(--glow); }
+  #white { margin-top:10px; padding:9px 20px; border:1px solid var(--line); border-radius:10px;
+           background:var(--field); color:var(--text); font:inherit; cursor:pointer; }
+  #white:active { background:#fff; color:#000; }
+
+  .kv { display:flex; justify-content:space-between; gap:12px; margin:9px 0 2px; font-size:14px; }
   .kv span:first-child { color:var(--dim); }
   .kv span:last-child { text-align:right; word-break:break-all; }
-  .bar { height:8px; border-radius:4px; background:#2a2e36; overflow:hidden; margin:2px 0 6px; }
-  .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .4s; }
-  .bar i.hot { background:#ff6b6b; }
-  #reboot { margin-top:12px; padding:8px 18px; border:1px solid #6b2c2c; border-radius:8px;
-            background:#3a2020; color:#ffb4b4; font:inherit; cursor:pointer; }
-  #reboot:active { background:#ff6b6b; color:#000; }
+  .bar { height:8px; border-radius:4px; background:rgba(255,255,255,.1); overflow:hidden; margin:3px 0 7px; }
+  .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg,#3de0c8,#ffd166); transition:width .4s; }
+  .bar i.hot { background:linear-gradient(90deg,#ff9a3c,#ff4d6d); }
+  #reboot { margin-top:12px; padding:9px 20px; border:1px solid #8a3340; border-radius:10px;
+            background:rgba(255,77,109,.14); color:#ffb4c0; font:inherit; cursor:pointer; }
+  #reboot:active { background:#ff4d6d; color:#000; }
   #sys_note { font-size:12px; color:var(--dim); margin-top:8px; }
+
   #sleep_note, #scene_note { font-size:13px; color:var(--dim); margin-top:6px; min-height:1em; }
   #sleep_note { color:var(--accent); }
-  .scene { display:flex; gap:6px; margin:6px 0; }
-  .scene .go { flex:1; padding:9px 12px; text-align:left; border:1px solid var(--line); border-radius:8px;
-               background:#2a2e36; color:var(--text); font:inherit; cursor:pointer; }
-  .scene .go:active { background:var(--accent); border-color:var(--accent); color:#000; }
-  .scene .del { width:44px; border:1px solid var(--line); border-radius:8px; background:#2a2e36;
+  .scene { display:flex; gap:8px; margin:8px 0; }
+  .scene .go { flex:1; padding:11px 14px; text-align:left; border:1px solid var(--line); border-radius:12px;
+               background:var(--field); color:var(--text); font:inherit; font-weight:600; cursor:pointer; }
+  .scene .go:active { background:linear-gradient(135deg,#ffd35c,#ff8a2a); color:#2a1400; }
+  .scene .del { width:46px; border:1px solid var(--line); border-radius:12px; background:var(--field);
                 color:var(--dim); font:inherit; cursor:pointer; }
-  .scene .del:active { background:#ff6b6b; color:#000; }
-  #scene_name { flex:1; min-width:0; padding:8px 10px; border:1px solid var(--line); border-radius:8px;
-                background:#2a2e36; color:var(--text); font:inherit; }
-  #scene_row { display:flex; gap:6px; margin-top:12px; }
-  #scene_save { padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:#2a2e36;
-                color:var(--text); font:inherit; cursor:pointer; }
-  #scene_save:active { background:var(--accent); border-color:var(--accent); color:#000; }
+  .scene .del:active { background:#ff4d6d; color:#000; }
+  #scene_row { display:flex; gap:8px; margin-top:14px; }
+  #scene_name { flex:1; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:12px;
+                background:var(--field); color:var(--text); font:inherit; }
+  #scene_save { padding:10px 16px; border:1px solid var(--line); border-radius:12px; background:var(--field);
+                color:var(--text); font:inherit; font-weight:600; cursor:pointer; }
+  #scene_save:active { background:linear-gradient(135deg,#ffd35c,#ff8a2a); color:#2a1400; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Лампа Yeelight</h1>
+  <h1>Yeelight Screen Light Bar Pro YLTD003</h1>
+  <div id="strip"></div>
   <div id="status">читаю состояние лампы…</div>
 
-  <details class="card" id="sec_main" open>
+  <details class="card" id="sec_main" style="--tone:#ffd166" open>
     <summary>Основной свет</summary>
     <button type="button" id="power" class="pwr" data-on="0" disabled>Основной свет…</button>
+    <button type="button" id="all_off" class="pwr soft" disabled>Выключить всё (основной свет и подсветку)</button>
     <div class="row"><span>Яркость</span><b id="bright_v"></b></div>
     <input type="range" id="bright" min="1" max="100" autocomplete="off">
     <div class="row"><span>Цветовая температура</span><b id="ct_v"></b></div>
     <input type="range" id="ct" min="2700" max="6500" step="100" autocomplete="off">
   </details>
 
-  <details class="card" id="sec_bg" open>
+  <details class="card" id="sec_bg" style="--tone:var(--glow)" open>
     <summary>Подсветка сзади</summary>
     <button type="button" id="bg_power" class="pwr" data-on="0" disabled>Подсветка…</button>
     <div class="row"><span>Яркость</span><b id="bg_bright_v"></b></div>
@@ -131,7 +177,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     <div id="sleep_note"></div>
   </details>
 
-  <details class="card" id="sec_scenes" open>
+  <details class="card" id="sec_scenes" style="--tone:#9b8cff" open>
     <summary>Сцены подсветки</summary>
     <div id="scene_list"></div>
     <div id="scene_row">
@@ -141,7 +187,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     <div id="scene_note"></div>
   </details>
 
-  <details class="card" id="sec_sys" open>
+  <details class="card" id="sec_sys" style="--tone:#3de0c8" open>
     <summary>System</summary>
     <div class="kv"><span>Плата</span><span id="sys_chip">—</span></div>
     <div class="kv"><span>Время работы</span><span id="sys_uptime">—</span></div>
@@ -181,6 +227,10 @@ const SWATCHES = {
   garland: 'linear-gradient(90deg,#f00 0 25%,#0c0 25% 50%,#fc0 50% 75%,#00f 75%)',
   police:  'linear-gradient(90deg,#f00 0 50%,#00f 50%)'
 };
+// Цвет свечения страницы для каждого эффекта (у «обычного цвета», волны и сердцебиения он берётся с ползунков)
+const GLOW = { rainbow: '#b46cff', warm: '#ff7a2a', cold: '#2aa8ff', neon: '#ff2fe0', pastel: '#ffb3d9', fire: '#ff6a00',
+               candle: '#ffa23a', sunset: '#ff7a18', sunrise: '#ffb347', storm: '#7aa2ff', ocean: '#00c8c0',
+               lava: '#ff3a00', garland: '#38d66b', police: '#ff3040' };
 // Эффекты, у которых цвет выбирается ползунками, и эффекты, которые идут один раз заданное время
 const COLOR_EFFECTS = ['wave', 'heart'];
 const PALETTE_EFFECTS = ['rainbow', 'warm', 'cold', 'neon', 'pastel'];  // переливания: у них работает «Размах яркости»
@@ -189,6 +239,14 @@ const TIMED_EFFECTS = ['sunset', 'sunrise'];
 const EFFECT_TO_BOARD = { rainbow: 'on', wave: 'wave', fire: 'fire', candle: 'candle', sunset: 'sunset', sunrise: 'sunrise',
                           storm: 'storm', ocean: 'ocean', lava: 'lava', heart: 'heart', garland: 'garland', police: 'police',
                           warm: 'warm', cold: 'cold', neon: 'neon', pastel: 'pastel' };
+// Цветная полоска на каждой кнопке эффекта: видно, какие цвета он даёт
+const BUTTON_SW = Object.assign({}, SWATCHES, {
+  wave: 'linear-gradient(90deg,#1b1b2b,#ff6bd6,#1b1b2b)',
+  heart: 'linear-gradient(90deg,#3a0014,#ff2d55,#3a0014)' });
+document.querySelectorAll('#bg_effect button[data-v]').forEach(b => {
+  const g = BUTTON_SW[b.dataset.v];
+  if (g) b.style.setProperty('--sw', g);
+});
 let flowSec = 3;    // время одного шага, секунды (у обычных эффектов)
 let flowMin = 10;   // общая длительность, минуты (у заката и рассвета)
 let lastAction = 0;
@@ -206,8 +264,23 @@ function setOn(id, on) {
   const b = $(id);
   b.dataset.on = on ? '1' : '0';
   b.classList.toggle('on', on);
-  b.textContent = id === 'power' ? (on ? 'Основной свет: включён' : 'Основной свет: выключен')
-                                 : (on ? 'Подсветка: включена' : 'Подсветка: выключена');
+  b.textContent = on ? 'Подсветка: включена' : 'Подсветка: выключена';
+  updateGlow();
+}
+
+// Основной свет не выключается: лампа гасит оба света сразу, поэтому у него три состояния:
+// on — горит, dim — приглушён до минимальной яркости (подсветка при этом не мигает), off — лампа выключена целиком
+let mainMode = 'off';
+let mainSaved = 70;  // яркость до приглушения
+const MAIN_LABELS = { on: 'Основной свет: включён', dim: 'Основной свет: приглушён', off: 'Основной свет: выключен' };
+
+function setMain(mode) {
+  mainMode = mode;
+  const b = $('power');
+  b.dataset.on = mode === 'on' ? '1' : '0';
+  b.classList.toggle('on', mode === 'on');
+  b.classList.toggle('dim', mode === 'dim');
+  b.textContent = MAIN_LABELS[mode];
 }
 
 // ---------- Сворачиваемые блоки ----------
@@ -266,6 +339,31 @@ function updateSwatch() {
   const e = effect();
   $('swatch').style.background = SWATCHES[e]
     || (COLOR_EFFECTS.includes(e) ? 'linear-gradient(90deg,#000,' + col + ',#000)' : col);
+  document.documentElement.style.setProperty('--hue-solid', hsvCss(+$('hue').value, 100));
+  updateGlow();
+}
+
+// Вся страница светится цветом подсветки: фон, полоска под заголовком, бегунки. Подсветка выключена: приглушённый серо-синий
+function updateGlow() {
+  const root = document.documentElement.style;
+  const e = effect();
+  const col = hsvCss(+$('hue').value, +$('sat').value);
+  let glow, grad;
+  if (!isOn('bg_power')) {
+    glow = '#4a5170';
+    grad = 'linear-gradient(90deg,#2a2f55,#4a5170,#2a2f55)';
+  } else if (e === 'off') {
+    glow = col;
+    grad = 'linear-gradient(90deg,' + col + ',' + col + ')';
+  } else if (COLOR_EFFECTS.includes(e)) {
+    glow = col;
+    grad = 'linear-gradient(90deg,#000,' + col + ',#000)';
+  } else {
+    glow = GLOW[e];
+    grad = SWATCHES[e];
+  }
+  root.setProperty('--glow', glow);
+  root.setProperty('--glow-grad', grad);
 }
 
 function updateLabel(id) {
@@ -364,6 +462,11 @@ function flush() {
 ['bright', 'ct'].forEach(id => {
   $(id).addEventListener('input', () => {
     updateLabel(id);
+    if (id === 'bright') {
+      const v = +$('bright').value;
+      if (v > 1) mainSaved = v;
+      if (mainMode !== 'off') setMain(v <= 1 ? 'dim' : 'on');
+    }
     queue({ [id]: $(id).value });
   });
 });
@@ -436,29 +539,41 @@ $('white').addEventListener('click', () => {
   queue(usesColor() ? flowParams() : Object.assign({ hue: $('hue').value, sat: 0 }, stop), true);
 });
 
-// Что отправить, чтобы вернуть подсветку в нынешнее состояние: таймер сна, эффект или обычный цвет
-function restoreBgParams() {
-  const color = { hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value };
-  if (sleepEnd > Date.now()) {
-    return Object.assign({ bg_sleep: Math.max(1, Math.ceil((sleepEnd - Date.now()) / 60000)) }, color);
-  }
-  if (flowOn()) return flowParams();
-  return Object.assign({ bg_power: 'on' }, color);
-}
-
 $('power').addEventListener('click', () => {
-  const on = !isOn('power');
-  setOn('power', on);
-  syncAfterSend = 'state';  // проверяем, как лампа на самом деле отреагировала: обе кнопки берём из её ответа
-  const params = { power: on ? 'on' : 'off' };
-  // Эта лампа включает и выключает оба света сразу, отдельной команды для основного света у неё нет.
-  // Поэтому состояние подсветки сразу восстанавливаем следующей командой.
-  if (isOn('bg_power')) {
-    if (!on) Object.assign(params, restoreBgParams());  // основной погас вместе с подсветкой: возвращаем подсветку
-  } else if (on) {
-    params.bg_power = 'off';  // основной включился вместе с подсветкой, а она была выключена
+  syncAfterSend = 'state';  // через секунду сверяем кнопки с лампой
+  if (mainMode === 'on') {
+    // Приглушаем до минимума, подсветку не трогаем
+    const cur = +$('bright').value;
+    if (cur > 1) mainSaved = cur;
+    $('bright').value = 1;
+    updateLabel('bright');
+    setMain('dim');
+    queue({ main: 'dim', main_save: mainSaved }, true);
+  } else {
+    // Возвращаем прежнюю яркость; если лампа была выключена целиком, сначала включаем её
+    const wasOff = mainMode === 'off';
+    $('bright').value = mainSaved;
+    updateLabel('bright');
+    setMain('on');
+    const params = { main: 'restore' };
+    if (wasOff) {
+      params.power = 'on';
+      if (!isOn('bg_power')) params.bg_power = 'off';  // лампа зажигает оба света, а подсветка была выключена
+    }
+    queue(params, true);
   }
-  queue(params, true);
+});
+
+// Выключает обе лампы сразу: подсветка тоже гаснет, эффекты и таймер сна сбрасываются
+$('all_off').addEventListener('click', () => {
+  setMain('off');
+  setOn('bg_power', false);
+  setEffect('off');
+  updateSwatch();
+  sleepEnd = 0;
+  renderSleep();
+  syncAfterSend = 'state';
+  queue({ power: 'off' }, true);
 });
 
 $('bg_power').addEventListener('click', () => {
@@ -494,11 +609,13 @@ function refresh(force, applyColor) {
       setStatus(j.ok);
       if (!j.ok) return;
       if (!force && lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
-      setOn('power', j.power === 'on');
+      if (j.main_saved > 1) mainSaved = j.main_saved;
+      setMain(j.power !== 'on' ? 'off' : (j.bright <= 1 ? 'dim' : 'on'));
       setOn('bg_power', j.bg_power === 'on');
       if (!stateLoaded) {  // кнопки включения ждут первого ответа лампы, чтобы не показывать выдуманное состояние
         stateLoaded = true;
         $('power').disabled = false;
+        $('all_off').disabled = false;
         $('bg_power').disabled = false;
       }
       // Лампа сообщает, идёт ли эффект; какой именно, помнит плата. Если плата перезагружалась, считаем переливанием
