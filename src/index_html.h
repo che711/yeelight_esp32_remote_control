@@ -67,16 +67,48 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   .pwr:disabled { opacity:.45; cursor:default; }
 
   .seg { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 8px; }
-  .seg button { position:relative; overflow:hidden; flex:1 1 30%; padding:11px 6px 14px; border:1px solid var(--line);
-                border-radius:12px; background:var(--field); color:var(--text); font:inherit; font-size:14px; cursor:pointer;
-                transition:box-shadow .2s, border-color .2s; }
-  .seg button[data-v]:not([data-v="off"])::after { content:''; position:absolute; left:0; right:0; bottom:0; height:4px;
-                background:var(--sw, transparent); }
+  .seg button { position:relative; isolation:isolate; overflow:hidden; flex:1 1 30%; padding:11px 6px 14px;
+                border:1px solid var(--line); border-radius:12px; background:var(--field); color:var(--text);
+                font:inherit; font-size:14px; cursor:pointer; transition:box-shadow .2s, border-color .2s; }
   .seg button:active { background:rgba(255,255,255,.2); }
-  .seg button.on { background-image:linear-gradient(rgba(8,9,28,.55),rgba(8,9,28,.55)), var(--sw, linear-gradient(135deg,#ffd35c,#ff8a2a));
-                   color:#fff; font-weight:700; border-color:rgba(255,255,255,.8); text-shadow:0 1px 3px rgba(0,0,0,.7);
-                   box-shadow:0 0 20px -2px var(--glow); }
-  .seg button[data-v="off"].on { background-image:none; background:#2f3580; box-shadow:none; }
+  /* Цветная полоска внизу кнопки играет так же, как сам эффект; у включённого эффекта она заливает всю кнопку */
+  .seg button[data-v]::after { content:''; position:absolute; z-index:-1; left:0; right:0; bottom:0; height:4px;
+        background-image:var(--sw); background-size:250% 100%; background-repeat:no-repeat;
+        animation:drift 8s ease-in-out infinite alternate; }
+  .seg button[data-v="off"]::after { content:none; }
+  .seg button[data-v="rainbow"]::after { animation-duration:7s; }
+  .seg button[data-v="ocean"]::after { animation-duration:10s; }
+  .seg button[data-v="fire"]::after { animation:drift 1.6s ease-in-out infinite alternate, flicker-fire .9s linear infinite; }
+  .seg button[data-v="candle"]::after { animation:drift 6s ease-in-out infinite alternate, flicker-candle 3.6s ease-in-out infinite; }
+  .seg button[data-v="lava"]::after { animation:drift 12s ease-in-out infinite alternate, lava 6s ease-in-out infinite; }
+  .seg button[data-v="sunset"]::after { background-size:300% 100%; animation:drift 9s ease-in-out infinite alternate; }
+  .seg button[data-v="sunrise"]::after { background-size:300% 100%; animation:drift-rev 9s ease-in-out infinite alternate; }
+  .seg button[data-v="storm"]::after { background-size:100% 100%; animation:storm 6s linear infinite; }
+  .seg button[data-v="wave"]::after { background-size:100% 100%; animation:pulse 2.4s ease-in-out infinite; }
+  .seg button[data-v="heart"]::after { background-size:100% 100%; animation:beat 1.4s ease-out infinite; }
+  .seg button[data-v="garland"]::after { background-image:none; background-color:#f00; animation:garland 3.2s steps(1) infinite; }
+  .seg button[data-v="police"]::after { background-image:none; background-color:#f00; animation:police 1.6s steps(1) infinite; }
+  .seg button.on { background:rgba(8,9,28,.72); color:#fff; font-weight:700; border-color:rgba(255,255,255,.8);
+                   text-shadow:0 1px 3px rgba(0,0,0,.7); box-shadow:0 0 20px -2px var(--glow); }
+  .seg button.on[data-v]::after { top:0; height:auto; opacity:.62; }
+  .seg button[data-v="off"].on { background:#2f3580; box-shadow:none; }
+  @keyframes drift { from { background-position:0% 0; } to { background-position:100% 0; } }
+  @keyframes drift-rev { from { background-position:100% 0; } to { background-position:0% 0; } }
+  @keyframes flicker-fire { 0%,100% { filter:brightness(1); } 12% { filter:brightness(1.45); } 25% { filter:brightness(.7); }
+        38% { filter:brightness(1.3); } 50% { filter:brightness(.85); } 63% { filter:brightness(1.55); }
+        78% { filter:brightness(.75); } 90% { filter:brightness(1.25); } }
+  @keyframes flicker-candle { 0%,100% { filter:brightness(.95); } 20% { filter:brightness(1.12); } 35% { filter:brightness(.85); }
+        55% { filter:brightness(1.18); } 75% { filter:brightness(.9); } }
+  @keyframes lava { 0%,100% { filter:brightness(.75); } 50% { filter:brightness(1.3); } }
+  @keyframes storm { 0%,100% { filter:brightness(.55); } 3% { filter:brightness(2.4); } 5% { filter:brightness(.55); }
+        7% { filter:brightness(2); } 9% { filter:brightness(.55); } 57% { filter:brightness(2.6); } 58.5% { filter:brightness(.6); } }
+  @keyframes beat { 0%,100% { opacity:.3; } 8% { opacity:1; } 16% { opacity:.4; } 24% { opacity:.9; } 40% { opacity:.3; } }
+  @keyframes pulse { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+  @keyframes garland { 0%,100% { background-color:#f00; } 25% { background-color:#0c0; } 50% { background-color:#fc0; } 75% { background-color:#00f; } }
+  @keyframes police { 0%,100% { background-color:#f00; } 12.5% { background-color:#400; } 25% { background-color:#f00; }
+        37.5% { background-color:#400; } 50% { background-color:#00f; } 62.5% { background-color:#004; }
+        75% { background-color:#00f; } 87.5% { background-color:#004; } }
+  @media (prefers-reduced-motion: reduce) { .seg button::after { animation:none !important; } }
 
   #swatch { width:100%; height:12px; border-radius:6px; margin-top:12px; box-shadow:0 0 18px -4px var(--glow); }
   #white { margin-top:10px; padding:9px 20px; border:1px solid var(--line); border-radius:10px;
@@ -94,6 +126,18 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   #reboot:active { background:#ff4d6d; color:#000; }
   #sys_note { font-size:12px; color:var(--dim); margin-top:8px; }
 
+  .ex { margin:12px 0; }
+  .ex .t { font-size:13px; color:var(--dim); margin-bottom:5px; }
+  .code { display:flex; gap:8px; align-items:stretch; }
+  .code code { flex:1; min-width:0; padding:9px 11px; border-radius:10px; background:rgba(0,0,0,.38);
+               border:1px solid var(--line); color:#d7f7ff; white-space:pre; overflow-x:auto;
+               font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  .code button { padding:0 12px; border:1px solid var(--line); border-radius:10px; background:var(--field);
+                 color:var(--text); font:inherit; font-size:13px; cursor:pointer; }
+  .code button:active { background:linear-gradient(135deg,#ffd35c,#ff8a2a); color:#2a1400; }
+  .params { margin-top:16px; font-size:13px; color:var(--dim); }
+  .params div { margin:5px 0; }
+  .params b { color:var(--text); font:600 12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
   #sleep_note, #scene_note { font-size:13px; color:var(--dim); margin-top:6px; min-height:1em; }
   #sleep_note { color:var(--accent); }
   .scene { display:flex; gap:8px; margin:8px 0; }
@@ -113,7 +157,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 </head>
 <body>
 <main>
-  <h1>Yeelight Screen Light Bar Pro YLTD003</h1>
+  <h1>Yeelight Screen Light Bar Pro (YLTD003)</h1>
   <div id="strip"></div>
   <div id="status">читаю состояние лампы…</div>
 
@@ -185,6 +229,17 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
       <button type="button" id="scene_save">Сохранить текущую</button>
     </div>
     <div id="scene_note"></div>
+  </details>
+
+  <details class="card" id="sec_api" style="--tone:#ff7ab8">
+    <summary>API для терминала (curl)</summary>
+    <div class="kv"><span>Адрес платы</span><span id="api_base">—</span></div>
+    <div class="ex">
+      <div class="t">Текущие настройки подсветки одной командой</div>
+      <div class="code"><code id="api_now"></code><button type="button" id="api_now_copy">Копировать</button></div>
+    </div>
+    <div id="api_list"></div>
+    <div class="params" id="api_params"></div>
   </details>
 
   <details class="card" id="sec_sys" style="--tone:#3de0c8" open>
@@ -286,10 +341,15 @@ function setMain(mode) {
 // ---------- Сворачиваемые блоки ----------
 
 document.querySelectorAll('details.card').forEach(d => {
-  try { if (localStorage.getItem('open_' + d.id) === '0') d.open = false; } catch (e) {}
+  try {
+    const saved = localStorage.getItem('open_' + d.id);
+    if (saved === '0') d.open = false;
+    else if (saved === '1') d.open = true;
+  } catch (e) {}
   d.addEventListener('toggle', () => {
     try { localStorage.setItem('open_' + d.id, d.open ? '1' : '0'); } catch (e) {}
     if (d.id === 'sec_sys' && d.open) loadSystem();
+    if (d.id === 'sec_api' && d.open) renderApiNow();
   });
 });
 
@@ -341,6 +401,7 @@ function updateSwatch() {
     || (COLOR_EFFECTS.includes(e) ? 'linear-gradient(90deg,#000,' + col + ',#000)' : col);
   document.documentElement.style.setProperty('--hue-solid', hsvCss(+$('hue').value, 100));
   updateGlow();
+  renderApiNow();
 }
 
 // Вся страница светится цветом подсветки: фон, полоска под заголовком, бегунки. Подсветка выключена: приглушённый серо-синий
@@ -369,6 +430,7 @@ function updateGlow() {
 function updateLabel(id) {
   $(id + '_v').textContent = $(id).value + suffix[id];
   if (id === 'hue' || id === 'sat') updateSwatch();
+  renderApiNow();
 }
 
 // Обратное преобразование: число 0xRRGGBB от лампы в тон и насыщенность для ползунков
@@ -668,6 +730,112 @@ function refresh(force, applyColor) {
     .finally(() => { refreshing = false; });
 }
 
+// ---------- API для терминала ----------
+
+const API_EXAMPLES = [
+  ['Состояние лампы', b => `curl ${b}/api/state`],
+  ['Приглушить основной свет', b => `curl "${b}/api/set?main=dim"`],
+  ['Вернуть яркость основного света', b => `curl "${b}/api/set?main=restore"`],
+  ['Яркость и температура основного света', b => `curl "${b}/api/set?bright=60&ct=4000"`],
+  ['Включить подсветку красным', b => `curl "${b}/api/set?bg_power=on&hue=0&sat=100&bg_bright=80"`],
+  ['Белая подсветка', b => `curl "${b}/api/set?bg_power=on&hue=0&sat=0&bg_bright=80"`],
+  ['Костёр, шаг 2 секунды', b => `curl "${b}/api/set?bg_flow=fire&flow_ms=2000&bg_bright=80"`],
+  ['Неон с размахом яркости', b => `curl "${b}/api/set?bg_flow=neon&flow_ms=3000&swing=40&bg_bright=90"`],
+  ['Волна синим цветом', b => `curl "${b}/api/set?bg_flow=wave&flow_ms=3000&hue=220&sat=100&bg_bright=80"`],
+  ['Закат за 15 минут', b => `curl "${b}/api/set?bg_flow=sunset&flow_ms=900000&bg_bright=70"`],
+  ['Таймер сна на 30 минут', b => `curl "${b}/api/set?bg_sleep=30&hue=30&sat=80&bg_bright=60"`],
+  ['Остановить эффект', b => `curl "${b}/api/set?bg_flow=off"`],
+  ['Выключить подсветку', b => `curl "${b}/api/set?bg_power=off"`],
+  ['Выключить всё', b => `curl "${b}/api/set?power=off"`],
+  ['Список сохранённых сцен', b => `curl ${b}/api/scenes`],
+  ['Включить сцену по названию', b => `curl -G "${b}/api/scene" --data-urlencode "name=Вечер"`],
+  ['Данные о плате', b => `curl ${b}/api/system`],
+  ['Перезагрузить плату', b => `curl -X POST ${b}/api/reboot`],
+];
+
+const API_PARAMS = [
+  ['power=on|off', 'обе лампы сразу (основной свет и подсветка)'],
+  ['main=dim|restore', 'приглушить основной свет до минимума или вернуть прежнюю яркость'],
+  ['bright=1..100, ct=2700..6500', 'яркость и цветовая температура основного света'],
+  ['bg_power=on|off', 'включить или выключить подсветку; с ним можно сразу задать цвет'],
+  ['hue=0..359, sat=0..100, bg_bright=1..100', 'цвет, насыщенность и яркость подсветки'],
+  ['bg_flow=<эффект>|off', 'on (радуга), warm, cold, neon, pastel, wave, fire, candle, sunset, sunrise, storm, ocean, lava, heart, garland, police'],
+  ['flow_ms', 'время одного шага в миллисекундах; у sunset и sunrise общая длительность'],
+  ['swing=0..90', 'размах яркости у переливаний (on, warm, cold, neon, pastel)'],
+  ['hue, sat вместе с bg_flow', 'цвет для wave и heart'],
+  ['bg_sleep=1..240', 'таймер сна: подсветка плавно гаснет за столько минут; цвет и яркость берутся из hue, sat, bg_bright'],
+];
+
+// Копирование: на странице по http (не https) navigator.clipboard недоступен, поэтому запасной способ
+function copyText(text, btn) {
+  const done = () => {
+    const old = btn.textContent;
+    btn.textContent = 'Скопировано';
+    setTimeout(() => { btn.textContent = old; }, 1200);
+  };
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.append(ta);
+    ta.select();
+    try { if (document.execCommand('copy')) done(); } catch (e) {}
+    ta.remove();
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done).catch(fallback);
+  else fallback();
+}
+
+function renderApi() {
+  const base = location.origin;
+  $('api_base').textContent = base;
+  const list = $('api_list');
+  list.textContent = '';
+  API_EXAMPLES.forEach(([title, make]) => {
+    const cmd = make(base);
+    const wrap = document.createElement('div');
+    wrap.className = 'ex';
+    const t = document.createElement('div');
+    t.className = 't';
+    t.textContent = title;
+    const row = document.createElement('div');
+    row.className = 'code';
+    const code = document.createElement('code');
+    code.textContent = cmd;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Копировать';
+    btn.addEventListener('click', () => copyText(cmd, btn));
+    row.append(code, btn);
+    wrap.append(t, row);
+    list.append(wrap);
+  });
+  const params = $('api_params');
+  params.textContent = '';
+  const head = document.createElement('div');
+  head.textContent = 'Параметры /api/set (их можно объединять через &):';
+  params.append(head);
+  API_PARAMS.forEach(([name, text]) => {
+    const line = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = name;
+    line.append(b, ' — ' + text);
+    params.append(line);
+  });
+}
+
+// Команда, которая повторяет текущие настройки подсветки на странице
+function renderApiNow() {
+  if (!$('sec_api').open) return;
+  const q = flowOn()
+    ? new URLSearchParams(flowParams())
+    : new URLSearchParams({ bg_power: 'on', hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value });
+  $('api_now').textContent = 'curl "' + location.origin + '/api/set?' + q.toString() + '"';
+}
+
+$('api_now_copy').addEventListener('click', () => copyText($('api_now').textContent, $('api_now_copy')));
+
 // ---------- System ----------
 
 const kb = n => (n / 1024).toFixed(0) + ' КБ';
@@ -852,6 +1020,8 @@ $('scene_save').addEventListener('click', () => {
 
 ['bright', 'ct', 'bg_bright', 'hue', 'sat', 'flow_s', 'swing', 'sleep_m'].forEach(updateLabel);
 loadScenes();
+renderApi();
+renderApiNow();
 refresh();
 setInterval(() => { if (!stateLoaded) refresh(); }, 3000);  // пока лампа не ответила, пробуем снова
 setInterval(refresh, 15000);
