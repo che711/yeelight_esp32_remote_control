@@ -548,7 +548,10 @@ void handleScene() {
   long fm = constrain(sceneNum(obj, "fm", 10), 1, 30);
   int w = constrain(sceneNum(obj, "w", 0), 0, 90);
 
-  // Те же параметры, что отправляет страница при включении сцены
+  // Те же параметры, что отправляет страница при включении сцены.
+  // Свойства эффекта (разовый, цвет с ползунков, размах яркости) берём из таблицы FLOW_DEFS,
+  // чтобы новый эффект не надо было дописывать здесь.
+  const FlowDef *def = findFlow(e);
   argOverlay.clear();
   argOverlay["bg_bright"] = String(br);
   if (e == "off" || e.length() == 0) {
@@ -556,14 +559,14 @@ void handleScene() {
     argOverlay["hue"] = String(hue);
     argOverlay["sat"] = String(sat);
   } else {
-    bool timed = (e == "sunset" || e == "sunrise");
+    bool timed = def && def->once;
     argOverlay["bg_flow"] = (e == "rainbow") ? String("on") : e;
     argOverlay["flow_ms"] = String(timed ? fm * 60000L : fs * 1000L);
-    if (e == "wave" || e == "heart") {
+    if (e == "wave" || (def && def->useColor)) {
       argOverlay["hue"] = String(hue);
       argOverlay["sat"] = String(sat);
     }
-    if (e == "rainbow" || e == "warm" || e == "cold" || e == "neon" || e == "pastel") argOverlay["swing"] = String(w);
+    if (e == "rainbow" || (def && def->swing)) argOverlay["swing"] = String(w);
   }
   useOverlay = true;
   bool ok = applySet();
