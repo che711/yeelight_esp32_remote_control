@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A new run on the same branch cancels the old one
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Page and test checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Effect lists, page integrity, script syntax
+        run: python tests/check_static.py
+
+      - name: Tests (skipped without a board, but the files must parse)
+        run: pytest -q tests
+
+  build:
+    name: Firmware build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: PlatformIO cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      # config.h with the Wi-Fi password is not committed. If it is missing, create a placeholder so the firmware builds.
+      - name: Placeholder config.h for the build
+        run: |
+          if [ ! -f src/config.h ] && [ ! -f include/config.h ] && [ ! -f config.h ]; then
+            cat > src/config.h <<'EOF'
+          #pragma once
+          #define LAMP_IP "192.168.0.10"
+          #define LAMP_PORT 55443
+          #define WIFI_SSID "ci"
+          #define WIFI_PASS "ci"
+          #define WIFI_HOSTNAME "lamp-ci"
+          EOF
+          fi
+
+      - name: Build
+        run: pio run
+
+      - name: Firmware as a file
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: .pio/build/*/firmware.bin
+          if-no-files-found: warn
