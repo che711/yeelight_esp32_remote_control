@@ -111,9 +111,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   @media (prefers-reduced-motion: reduce) { .seg button::after { animation:none !important; } }
 
   #swatch { width:100%; height:12px; border-radius:6px; margin-top:12px; box-shadow:0 0 18px -4px var(--glow); }
-  #white { margin-top:10px; padding:9px 20px; border:1px solid var(--line); border-radius:10px;
-           background:var(--field); color:var(--text); font:inherit; cursor:pointer; }
-  #white:active { background:#fff; color:#000; }
 
   .kv { display:flex; justify-content:space-between; gap:12px; margin:9px 0 2px; font-size:14px; }
   .kv span:first-child { color:var(--dim); }
@@ -194,7 +191,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
     <input type="range" id="hue" min="0" max="359" autocomplete="off">
     <div class="row"><span>Saturation</span><b id="sat_v"></b></div>
     <input type="range" id="sat" min="0" max="100" autocomplete="off">
-    <button id="white" type="button">White</button>
     <div id="swatch"></div>
     <div class="row"><span>Sleep timer</span><b id="sleep_m_v"></b></div>
     <input type="range" id="sleep_m" min="1" max="120" value="30" autocomplete="off">
@@ -207,6 +203,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
   <details class="card" id="sec_scenes" style="--tone:#9b8cff" open>
     <summary>Backlight scenes</summary>
+    <div class="scene"><button type="button" id="white" class="go">White</button></div>
     <div id="scene_list"></div>
     <div id="scene_row">
       <input type="text" id="scene_name" maxlength="20" placeholder="Scene name" autocomplete="off">
