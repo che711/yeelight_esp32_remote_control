@@ -7,49 +7,50 @@
 #include "index_html.h"
 
 WebServer server(80);
-Preferences prefs;  // память платы, которая переживает перезагрузку: тут хранятся сцены
+Preferences prefs;  // board memory that survives reboots: scenes are stored here
 uint32_t cmdId = 1;
 uint32_t lastWifiTry = 0;
 
-// Какой эффект запускали на подсветке и с какими настройками. Лампа сообщает только «эффект идёт или нет»,
-// а после перезагрузки страницы нужно показать, какой именно, поэтому помним это на плате.
-String bgEffect = "off";  // off, on (переливание), wave, fire
+// Which effect was started on the backlight and with what settings. The lamp only reports
+// "an effect is running or not", but after a page reload the page has to show which one,
+// so the board remembers it.
+String bgEffect = "off";  // off, on (rainbow), wave, fire, ...
 int bgFlowMs = 3000;
 int bgFlowHue = 0;
 int bgFlowSat = 100;
-int bgFlowSwing = 0;       // размах яркости у переливаний, в процентах
-int mainSaved = 70;        // яркость основного света до приглушения: к ней возвращаемся
-uint32_t sleepEndMs = 0;   // когда по времени платы подсветка погаснет по таймеру сна (нужно только чтобы показать остаток)
+int bgFlowSwing = 0;       // brightness swing of the color-cycling effects, in percent
+int mainSaved = 70;        // main light brightness before dimming: we return to it
+uint32_t sleepEndMs = 0;   // board time when the sleep timer turns the backlight off (only used to show the time left)
 
-// Занятость сервера: какую долю времени за последние 10 секунд плата обрабатывала запросы
+// Server load: the share of the last 10 seconds the board spent handling requests
 uint32_t busyUs = 0;
 uint32_t busyWindowStart = 0;
 uint8_t busyPct = 0;
 
-// ---------- Связь с лампой ----------
+// ---------- Talking to the lamp ----------
 
-// Отправляет одну команду лампе, возвращает первую строку ответа
+// Sends one command to the lamp and returns the first line of the reply
 String sendCmd(const String &method, const String &params) {
-  // Лампа принимает около 60 команд в минуту, иначе замолкает на минуту и дольше.
-  // Держим паузу не меньше 1 секунды между командами.
+  // The lamp accepts about 60 commands per minute, otherwise it goes silent for a minute or more.
+  // Keep at least 1 second between commands.
   static uint32_t lastCmd = 0;
   while (lastCmd != 0 && millis() - lastCmd < 1000) delay(20);
   lastCmd = millis();
 
   WiFiClient c;
   if (!c.connect(LAMP_IP, LAMP_PORT, 2000)) {
-    Serial.println("lamp: нет соединения (проверьте LAN Control и IP)");
+    Serial.println("lamp: no connection (check LAN Control and the IP)");
     return "";
   }
   c.setNoDelay(true);
   uint32_t id = cmdId++;
   String idTag = String("\"id\":") + id + ",";
   String json = String("{\"id\":") + id + ",\"method\":\"" + method + "\",\"params\":" + params + "}";
-  c.print(json + "\r\n");  // одним пакетом: лампа сбрасывает соединение, если «\r\n» приходит отдельно
-  // Ждём ответ до 3 секунд, читаем до конца строки.
-  // Таймаут задан явно: у setTimeout() в разных версиях ядра разные единицы (секунды или миллисекунды).
-  // Лампа может прислать перед ответом уведомление {"method":"props",...} — такие строки пропускаем
-  // и ждём строку с нашим id.
+  c.print(json + "\r\n");  // in one packet: the lamp drops the connection if "\r\n" arrives separately
+  // Wait for the reply for up to 3 seconds, read up to the end of the line.
+  // The timeout is explicit: setTimeout() has different units (seconds or milliseconds) in different core versions.
+  // Before the reply the lamp may send a {"method":"props",...} notification: skip such lines
+  // and wait for the line with our id.
   String reply, line;
   uint32_t t0 = millis();
   bool got = false;
@@ -68,7 +69,7 @@ String sendCmd(const String &method, const String &params) {
   c.stop();
   Serial.printf("-> %s\n<- %s\n", json.c_str(), reply.c_str());
   if (reply.length() == 0) {
-    Serial.println("lamp: соединение есть, но ответа нет (возможно, лимит команд, подождите минуту)");
+    Serial.println("lamp: connected but no reply (maybe the command limit, wait a minute)");
   }
   return reply;
 }
@@ -77,7 +78,7 @@ bool replyOk(const String &reply) {
   return reply.indexOf("\"ok\"") >= 0;
 }
 
-// Достаёт значения из {"id":1,"result":["60","4500",...]}
+// Extracts the values from {"id":1,"result":["60","4500",...]}
 int parseResult(const String &reply, String out[], int maxCount) {
   int start = reply.indexOf("\"result\":[");
   if (start < 0) return 0;
@@ -97,7 +98,7 @@ int parseResult(const String &reply, String out[], int maxCount) {
   return count;
 }
 
-// ---------- Веб-сервер ----------
+// ---------- Web server ----------
 
 void handleRoot() {
   server.sendHeader("Cache-Control", "no-cache");
@@ -114,11 +115,11 @@ void handleState() {
     return;
   }
   String j = "{\"ok\":true";
-  // У этой лампы «power» показывает «включено», если горит хоть один из двух светов (основной или подсветка).
-  // Состояние именно основного света отдаёт «main_power»; если лампа его не вернула, берём «power».
+  // On this lamp "power" means "on" if at least one of the two lights (main or backlight) is on.
+  // The state of the main light alone is reported by "main_power"; if the lamp did not return it, use "power".
   String mainPower = (n >= 10 && v[9].length() > 0) ? v[9] : v[0];
   int mainBr = v[1].toInt();
-  if (mainBr > 1) mainSaved = mainBr;  // пока свет не приглушён, запоминаем его яркость
+  if (mainBr > 1) mainSaved = mainBr;  // while the light is not dimmed, remember its brightness
   j += ",\"power\":\"" + mainPower + "\"";
   j += ",\"bright\":" + String(v[1].toInt());
   j += ",\"ct\":" + String(v[2].toInt());
@@ -126,21 +127,21 @@ void handleState() {
   j += ",\"bg_bright\":" + String(v[4].toInt());
   j += ",\"hue\":" + String(v[5].toInt());
   j += ",\"sat\":" + String(v[6].toInt());
-  j += ",\"bg_flow\":\"" + (n >= 8 ? v[7] : String("")) + "\"";  // "1" — идёт эффект, "0" — нет
-  j += ",\"rgb\":" + String(n >= 9 ? v[8].toInt() : 0);             // текущий цвет подсветки, нужен для фиксации
-  j += ",\"effect\":\"" + bgEffect + "\"";                          // какой эффект запускали с этой платы
+  j += ",\"bg_flow\":\"" + (n >= 8 ? v[7] : String("")) + "\"";  // "1" - an effect is running, "0" - not
+  j += ",\"rgb\":" + String(n >= 9 ? v[8].toInt() : 0);             // current backlight color, needed for "lock color"
+  j += ",\"effect\":\"" + bgEffect + "\"";                          // which effect was started from this board
   j += ",\"flow_ms\":" + String(bgFlowMs);
   j += ",\"fhue\":" + String(bgFlowHue);
   j += ",\"fsat\":" + String(bgFlowSat);
   j += ",\"swing\":" + String(bgFlowSwing);
   j += ",\"main_saved\":" + String(mainSaved);
-  int32_t sleepLeft = (bgEffect == "sleep") ? (int32_t)(sleepEndMs - millis()) / 1000 : 0;  // секунд до выключения
+  int32_t sleepLeft = (bgEffect == "sleep") ? (int32_t)(sleepEndMs - millis()) / 1000 : 0;  // seconds until it turns off
   j += ",\"sleep_left\":" + String(sleepLeft > 0 ? sleepLeft : 0);
   j += "}";
   server.send(200, "application/json", j);
 }
 
-// Цвет из тона (0–359) и насыщенности (0–100) в число 0xRRGGBB для цветового потока лампы
+// Color from hue (0-359) and saturation (0-100) to a 0xRRGGBB number for the lamp's color flow
 unsigned long hsvToRgb(int hue, int sat) {
   float c = sat / 100.0f;
   float x = c * (1.0f - fabsf(fmodf(hue / 60.0f, 2.0f) - 1.0f));
@@ -157,7 +158,7 @@ unsigned long hsvToRgb(int hue, int sat) {
           (unsigned long)lroundf((b + m) * 255);
 }
 
-// Экранирует кавычки и слэши, чтобы имя сети не сломало JSON
+// Escapes quotes and backslashes so a network name cannot break the JSON
 String jsonEscape(const String &in) {
   String out;
   for (size_t i = 0; i < in.length(); i++) {
@@ -168,7 +169,7 @@ String jsonEscape(const String &in) {
   return out;
 }
 
-// Сведения о плате и её загруженности для блока System / Control
+// Board and load information for the System block
 void handleSystem() {
   float temp = temperatureRead();
   String j = "{";
@@ -179,7 +180,7 @@ void handleSystem() {
   j += ",\"heap_free\":" + String(ESP.getFreeHeap());
   j += ",\"heap_min\":" + String(ESP.getMinFreeHeap());
   j += ",\"sketch\":" + String(ESP.getSketchSize());
-  j += ",\"sketch_free\":" + String(ESP.getFreeSketchSpace());  // размер раздела под прошивку
+  j += ",\"sketch_free\":" + String(ESP.getFreeSketchSpace());  // size of the firmware partition
   j += ",\"uptime\":" + String(millis() / 1000);
   j += ",\"busy\":" + String(busyPct);
   j += ",\"temp\":" + (isnan(temp) ? String("null") : String(temp, 1));
@@ -191,7 +192,7 @@ void handleSystem() {
   server.send(200, "application/json", j);
 }
 
-// Сцены хранятся на плате одной строкой JSON; страница сама собирает и разбирает список
+// Scenes are stored on the board as one JSON string; the page builds and parses the list itself
 void handleScenesGet() {
   server.send(200, "application/json", prefs.getString("scenes", "[]"));
 }
@@ -208,71 +209,71 @@ void handleScenesPost() {
 
 void handleReboot() {
   server.send(200, "application/json", "{\"ok\":true}");
-  delay(300);  // даём ответу уйти в браузер
+  delay(300);  // let the reply reach the browser
   ESP.restart();
 }
 
-// ---------- Эффекты из таблиц ----------
-// Шаг эффекта: t — длительность перехода в сотых долях от базового времени (100 = всё время),
-// rgb — цвет (0 означает «цвет с ползунков»), b — яркость в процентах от выбранной.
+// ---------- Effects from tables ----------
+// An effect step: t - transition time in hundredths of the base time (100 = the whole time),
+// rgb - color (0 means "the color from the sliders"), b - brightness in percent of the chosen one.
 struct FlowStep { uint16_t t; uint32_t rgb; uint8_t b; };
 
 struct FlowDef {
   const char *name;
   const FlowStep *steps;
   uint8_t n;
-  bool once;       // идёт один раз за заданное время (закат, рассвет), а не по кругу
-  bool offAtEnd;   // после окончания подсветка гаснет
-  bool useColor;   // цвет берётся с ползунков (hue, sat)
-  bool swing;      // у шагов через один яркость уменьшается на «размах» (палитры переливания)
-  uint16_t minMs;  // быстрее этого шаги не делаем: слишком частые вспышки утомляют глаза
+  bool once;       // runs once over the given time (sunset, sunrise) instead of looping
+  bool offAtEnd;   // the backlight turns off when it finishes
+  bool useColor;   // the color comes from the sliders (hue, sat)
+  bool swing;      // every second step is dimmed by the "swing" (color-cycling palettes)
+  uint16_t minMs;  // no faster steps than this: flashing too often tires the eyes
 };
 
-// Свеча: один тёплый цвет, спокойные небольшие колебания яркости
+// Candle: one warm color, calm small brightness changes
 const FlowStep FLOW_CANDLE[] = {
   {80, 0xFF9329, 90}, {60, 0xFF8A1F, 70}, {110, 0xFF9A30, 95}, {70, 0xFF8C22, 75},
   {100, 0xFF9529, 100}, {65, 0xFF871C, 65}, {90, 0xFF9A33, 88}, {75, 0xFF8F25, 78}};
 
-// Закат: из тёплого белого в красный и затухание, весь путь занимает выбранное время
+// Sunset: from warm white to red and fade out; the whole path takes the chosen time
 const FlowStep FLOW_SUNSET[] = {
   {15, 0xFFE9C8, 100}, {20, 0xFFB347, 85}, {20, 0xFF7A18, 60},
   {20, 0xE8431A, 35}, {15, 0x8B1A1A, 15}, {10, 0x300606, 2}};
 
-// Рассвет: обратный путь, от тёмно-красного к яркому тёплому белому
+// Sunrise: the reverse path, from dark red to bright warm white
 const FlowStep FLOW_SUNRISE[] = {
   {10, 0x300606, 2}, {15, 0x8B1A1A, 15}, {20, 0xE8431A, 35},
   {20, 0xFF7A18, 60}, {20, 0xFFB347, 85}, {15, 0xFFE9C8, 100}};
 
-// Гроза: тёмно-синий фон и редкие короткие белые вспышки
+// Storm: dark blue background and rare short white flashes
 const FlowStep FLOW_STORM[] = {
   {120, 0x0B1238, 20}, {3, 0xFFFFFF, 100}, {6, 0x0B1238, 15}, {3, 0xE0E8FF, 90},
   {250, 0x0A0F2E, 12}, {4, 0xFFFFFF, 100}, {10, 0x0B1238, 18}, {150, 0x101C4A, 25}};
 
-// Океан: зелёный, бирюзовый, синий и фиолетовый медленно перетекают друг в друга
+// Ocean: green, turquoise, blue and violet slowly flow into each other
 const FlowStep FLOW_OCEAN[] = {
   {100, 0x00A8A8, 70}, {120, 0x0066CC, 60}, {100, 0x2A00B8, 55},
   {120, 0x00C878, 70}, {100, 0x00B4D8, 65}, {120, 0x5A1AB8, 55}};
 
-// Лава: тёмно-красный, малиновый и оранжевый, очень медленно, с редкими яркими вспышками
+// Lava: dark red, crimson and orange, very slow, with rare bright flashes
 const FlowStep FLOW_LAVA[] = {
   {200, 0x8B0000, 35}, {150, 0xC81E00, 55}, {120, 0xFF4500, 80}, {80, 0xFF7A00, 100},
   {160, 0xC81E00, 50}, {220, 0x600000, 25}, {140, 0xE02800, 65}};
 
-// Сердцебиение: два быстрых удара и пауза, цвет с ползунков
+// Heartbeat: two fast beats and a pause, color from the sliders
 const FlowStep FLOW_HEART[] = {
   {12, 0, 100}, {14, 0, 30}, {12, 0, 85}, {30, 0, 12}, {110, 0, 10}};
 
-// Гирлянда: красный, зелёный, золотой и синий сменяются резко (короткий переход, потом выдержка)
+// Garland: red, green, gold and blue change sharply (short transition, then a hold)
 const FlowStep FLOW_GARLAND[] = {
   {2, 0xFF0000, 100}, {100, 0xFF0000, 100}, {2, 0x00CC00, 100}, {100, 0x00CC00, 100},
   {2, 0xFFCC00, 100}, {100, 0xFFCC00, 100}, {2, 0x0000FF, 100}, {100, 0x0000FF, 100}};
 
-// Мигалка: два красных вспыхивания, потом два синих
+// Police: two red flashes, then two blue ones
 const FlowStep FLOW_POLICE[] = {
   {5, 0xFF0000, 100}, {5, 0xFF0000, 1}, {5, 0xFF0000, 100}, {5, 0xFF0000, 1},
   {5, 0x0000FF, 100}, {5, 0x0000FF, 1}, {5, 0x0000FF, 100}, {5, 0x0000FF, 1}};
 
-// Палитры переливания: шесть цветов по кругу
+// Color-cycling palettes: six colors in a loop
 const FlowStep FLOW_WARM[] = {
   {100, 0xFF3B00, 100}, {100, 0xFF6A00, 100}, {100, 0xFFA000, 100},
   {100, 0xFFC833, 100}, {100, 0xFF2D55, 100}, {100, 0xFF8A3D, 100}};
@@ -288,7 +289,7 @@ const FlowStep FLOW_PASTEL[] = {
 
 #define FLOW_N(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
 const FlowDef FLOW_DEFS[] = {
-  //  название   шаги            число шагов          один раз  погаснуть  цвет   размах  минимум, мс
+  //  name       steps          step count           once   off at end  color  swing  min, ms
   {"candle",  FLOW_CANDLE,  FLOW_N(FLOW_CANDLE),  false, false, false, false, 50},
   {"sunset",  FLOW_SUNSET,  FLOW_N(FLOW_SUNSET),  true,  true,  false, false, 50},
   {"sunrise", FLOW_SUNRISE, FLOW_N(FLOW_SUNRISE), true,  false, false, false, 50},
@@ -311,7 +312,7 @@ const FlowDef *findFlow(const String &name) {
   return nullptr;
 }
 
-// Собирает строку-цепочку для цветового потока лампы
+// Builds the chain string for the lamp's color flow
 String buildFlow(const FlowDef &d, long baseMs, int br, unsigned long userRgb, int swing) {
   String f;
   for (int i = 0; i < d.n; i++) {
@@ -320,15 +321,16 @@ String buildFlow(const FlowDef &d, long baseMs, int br, unsigned long userRgb, i
     if (t < d.minMs) t = d.minMs;
     unsigned long rgb = d.steps[i].rgb ? d.steps[i].rgb : userRgb;
     int b = br * d.steps[i].b / 100;
-    if (d.swing && (i % 2)) b = b * (100 - swing) / 100;  // размах: каждый второй цвет тусклее
+    if (d.swing && (i % 2)) b = b * (100 - swing) / 100;  // swing: every second color is dimmer
     if (b < 1) b = 1;
-    // длительность, режим 1 (RGB), цвет, яркость
+    // duration, mode 1 (RGB), color, brightness
     f += String(t) + ",1," + String(rgb) + "," + String(b);
   }
   return f;
 }
 
-// Параметры команды: обычно из запроса, а при включении сцены по названию (/api/scene) их собирает сама плата
+// Command parameters: normally from the request; when a scene is started by name (/api/scene)
+// the board builds them itself
 std::map<String, String> argOverlay;
 bool useOverlay = false;
 
@@ -342,11 +344,11 @@ String getA(const char *key) {
   return it == argOverlay.end() ? String("") : it->second;
 }
 
-// Применяет параметры к лампе и возвращает true, если все команды прошли. Параметры берутся из запроса
-// (/api/set?...) или, для сцены по названию, из argOverlay
+// Applies the parameters to the lamp and returns true if all commands succeeded. The parameters come from
+// the request (/api/set?...) or, for a scene by name, from argOverlay
 bool applySet() {
   bool allOk = true;
-  bool lampSilent = false;  // лампа не ответила совсем: остальные команды пробовать нет смысла
+  bool lampSilent = false;  // the lamp did not reply at all: no point trying the remaining commands
   auto run = [&](const String &method, const String &params) {
     if (lampSilent) { allOk = false; return; }
     String reply = sendCmd(method, params);
@@ -357,8 +359,8 @@ bool applySet() {
   if (hasA("power")) {
     run("set_power", String("[\"") + (getA("power") == "on" ? "on" : "off") + "\",\"smooth\",300]");
   }
-  // Основной свет не выключаем: лампа выключает оба света сразу. Вместо этого приглушаем его до минимума
-  // (main=dim) и возвращаем прежнюю яркость (main=restore).
+  // The main light is never turned off: the lamp turns both lights off at once. Instead we dim it to the minimum
+  // (main=dim) and later return the previous brightness (main=restore).
   if (hasA("main")) {
     if (getA("main") == "dim") {
       int saved = getA("main_save").toInt();
@@ -377,22 +379,22 @@ bool applySet() {
     int v = constrain(getA("ct").toInt(), 2700, 6500);
     run("set_ct_abx", "[" + String(v) + ",\"smooth\",150]");
   }
-  bool bgDone = false;  // подсветка уже получила цвет и яркость вместе с включением
+  bool bgDone = false;  // the backlight already got its color and brightness together with turning on
   if (hasA("bg_power") || hasA("bg_flow") || hasA("hue") || hasA("bg_bright") ||
       hasA("bg_sleep")) {
     sleepEndMs = 0;
-    bgEffect = "off";  // любая из этих команд останавливает эффект на лампе; запуск эффекта ниже запишет его заново
+    bgEffect = "off";  // any of these commands stops the effect on the lamp; starting an effect below records it again
   }
   if (hasA("bg_power")) {
     if (getA("bg_power") == "on") {
-      // Команда bg_set_power on у этой лампы отвечает «ok», но подсветку не включает.
-      // Поэтому включаем сценой: она сама включает подсветку и задаёт цвет и яркость.
+      // On this lamp bg_set_power on replies "ok" but does not turn the backlight on.
+      // So we turn it on with a scene: it turns the backlight on and sets the color and brightness.
       int hue = hasA("hue") ? constrain(getA("hue").toInt(), 0, 359) : 0;
       int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
       int br  = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;
       run("bg_set_scene", "[\"hsv\"," + String(hue) + "," + String(sat) + "," + String(br) + "]");
       bgDone = true;
-      // Проверяем, что подсветка правда включилась; если нет, переключаем командой bg_toggle
+      // Check that the backlight really turned on; if not, switch it with bg_toggle
       if (!lampSilent) {
         String v[1];
         String st = sendCmd("get_prop", "[\"bg_power\"]");
@@ -403,57 +405,57 @@ bool applySet() {
       run("bg_set_power", "[\"off\",\"smooth\",300]");
     }
   }
-  // Эффекты подсветки: лампа сама крутит цвета, плата после запуска ей не нужна.
-  // Запускаем сценой «cf», как и обычное включение подсветки: она заодно включает подсветку.
-  //   bg_flow=on      — переливание по кругу радуги
-  //   bg_flow=wave    — волна: яркость плавно растёт и падает в выбранном цвете (hue, sat)
-  //   bg_flow=fire    — костёр: тёплые оранжево-красные цвета с неровным мерцанием
-  //   bg_flow=<имя>   — эффекты из таблицы выше (свеча, закат, рассвет, гроза, океан, лава,
-  //                     сердцебиение, гирлянда, мигалка)
-  //   bg_flow=off     — остановить эффект
+  // Backlight effects: the lamp cycles the colors itself, the board is not needed after the start.
+  // We start them with a "cf" scene, like the plain backlight turn-on: it turns the backlight on as well.
+  //   bg_flow=on      - color cycling around the rainbow
+  //   bg_flow=wave    - wave: brightness smoothly rises and falls in the chosen color (hue, sat)
+  //   bg_flow=fire    - campfire: warm orange-red colors with uneven flicker
+  //   bg_flow=<name>  - effects from the table above (candle, sunset, sunrise, storm, ocean, lava,
+  //                     heartbeat, garland, police)
+  //   bg_flow=off     - stop the effect
   if (hasA("bg_flow")) {
     String mode = getA("bg_flow");
     const FlowDef *def = findFlow(mode);
     if (mode == "on" || mode == "wave" || mode == "fire" || def) {
       long flowMs = getA("flow_ms").toInt();
-      int stepMs = constrain(flowMs, 500, 30000);            // время одного шага
-      long totalMs = constrain(flowMs, 10000L, 3600000L);    // общая длительность заката и рассвета
+      int stepMs = constrain(flowMs, 500, 30000);            // time of one step
+      long totalMs = constrain(flowMs, 10000L, 3600000L);    // total duration of sunset and sunrise
       int br = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;
       int hue = hasA("hue") ? constrain(getA("hue").toInt(), 0, 359) : 0;
       int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
       int swing = hasA("swing") ? constrain(getA("swing").toInt(), 0, 90) : 0;
       String flow = "";
-      int count = 0;   // 0 — крутить бесконечно
-      int action = 1;  // что делать после остановки: 1 — остаться на текущем цвете, 2 — погасить
+      int count = 0;   // 0 - loop forever
+      int action = 1;  // what to do after it stops: 1 - stay on the current color, 2 - turn off
       if (mode == "on") {
         const unsigned long colors[] = {0xFF0000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF};
         for (int i = 0; i < 6; i++) {
           if (i) flow += ",";
-          // длительность, режим 1 (RGB), цвет, яркость (у каждого второго цвета ниже на размах)
+          // duration, mode 1 (RGB), color, brightness (every second color is lower by the swing)
           int bb = (i % 2) ? br * (100 - swing) / 100 : br;
           flow += String(stepMs) + ",1," + String(colors[i]) + "," + String(max(1, bb));
         }
       } else if (mode == "fire") {
-        // Цвета и яркость идут вразнобой, длительности разные: так пламя выглядит живым.
-        // Длительность шага — доля от выбранного времени, чтобы мерцание было быстрее переливания.
+        // Colors and brightness are mixed up and durations differ: that makes the flame look alive.
+        // The step duration is a share of the chosen time, so the flicker is faster than the color cycling.
         const unsigned long fc[] = {0xFF3C00, 0xFF8C00, 0xFF2800, 0xFFB400, 0xFF5000,
                                     0xFF6A00, 0xFFD23C, 0xFF3200, 0xFF9600, 0xFF4600};
-        const int fb[] = {100, 45, 80, 30, 65, 95, 40, 75, 55, 90};      // яркость в процентах от выбранной
-        const int ft[] = {15, 30, 20, 40, 12, 25, 35, 18, 28, 22};       // длительность в сотых долях шага
+        const int fb[] = {100, 45, 80, 30, 65, 95, 40, 75, 55, 90};      // brightness in percent of the chosen one
+        const int ft[] = {15, 30, 20, 40, 12, 25, 35, 18, 28, 22};       // duration in hundredths of a step
         for (int i = 0; i < 10; i++) {
           if (i) flow += ",";
           int t = max(50, stepMs * ft[i] / 100);
           flow += String(t) + ",1," + String(fc[i]) + "," + String(max(1, br * fb[i] / 100));
         }
       } else if (mode == "wave") {
-        int lo = max(1, br * 15 / 100);  // нижняя точка волны
+        int lo = max(1, br * 15 / 100);  // the lowest point of the wave
         String rgb = String(hsvToRgb(hue, sat));
         flow = String(stepMs) + ",1," + rgb + "," + String(lo) + "," +
                String(stepMs) + ",1," + rgb + "," + String(br);
       } else {
         flow = buildFlow(*def, def->once ? totalMs : (long)stepMs, br, hsvToRgb(hue, sat), swing);
         if (def->once) {
-          count = def->n;  // один проход: столько шагов, сколько в таблице
+          count = def->n;  // a single pass: as many steps as in the table
           action = def->offAtEnd ? 2 : 1;
         }
       }
@@ -467,8 +469,8 @@ bool applySet() {
       }
       bgFlowSwing = swing;
     } else if (hasA("hue")) {
-      // Выход из эффекта сразу в нужный цвет: одна сцена вместо «остановить» + «задать цвет».
-      // Так цвет меняется на секунду раньше: лампе нельзя слать команды чаще раза в секунду.
+      // Leave the effect straight into the wanted color: one scene instead of "stop" + "set color".
+      // The color changes a second sooner: the lamp cannot take commands more often than once a second.
       int hue = constrain(getA("hue").toInt(), 0, 359);
       int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
       int br  = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;
@@ -478,8 +480,8 @@ bool applySet() {
       run("bg_stop_cf", "[]");
     }
   }
-  // Таймер сна: подсветка за N минут плавно гаснет. Считает сама лампа: цепочка из двух шагов
-  // (сначала текущий цвет и яркость, потом медленное затухание до минимума) и действие «выключить» в конце.
+  // Sleep timer: over N minutes the backlight fades out smoothly. The lamp counts the time itself: a chain of two steps
+  // (first the current color and brightness, then a slow fade to the minimum) and the "turn off" action at the end.
   if (hasA("bg_sleep")) {
     int minutes = constrain(getA("bg_sleep").toInt(), 1, 240);
     int hue = hasA("hue") ? constrain(getA("hue").toInt(), 0, 359) : 0;
@@ -488,7 +490,7 @@ bool applySet() {
     long ms = minutes * 60000L;
     String rgb = String(hsvToRgb(hue, sat));
     String flow = String("50,1,") + rgb + "," + String(br) + "," + String(ms) + ",1," + rgb + ",1";
-    run("bg_set_scene", "[\"cf\",2,2,\"" + flow + "\"]");  // 2 шага, после них выключить
+    run("bg_set_scene", "[\"cf\",2,2,\"" + flow + "\"]");  // 2 steps, then turn off
     bgDone = true;
     bgEffect = "sleep";
     sleepEndMs = millis() + (uint32_t)ms;
@@ -511,7 +513,7 @@ void handleSet() {
   server.send(200, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
 }
 
-// Достаёт из записи сцены число и строку по имени поля
+// Extracts a number and a string from a scene record by field name
 long sceneNum(const String &obj, const char *key, long def) {
   int i = obj.indexOf(String("\"") + key + "\":");
   if (i < 0) return def;
@@ -530,7 +532,7 @@ String sceneStr(const String &obj, const char *key) {
   return j < 0 ? String("") : obj.substring(i, j);
 }
 
-// Включает сохранённую сцену по названию: curl "http://адрес/api/scene?name=Вечер"
+// Starts a saved scene by name: curl "http://address/api/scene?name=Evening"
 void handleScene() {
   String name = server.arg("name");
   String list = prefs.getString("scenes", "[]");
@@ -548,9 +550,9 @@ void handleScene() {
   long fm = constrain(sceneNum(obj, "fm", 10), 1, 30);
   int w = constrain(sceneNum(obj, "w", 0), 0, 90);
 
-  // Те же параметры, что отправляет страница при включении сцены.
-  // Свойства эффекта (разовый, цвет с ползунков, размах яркости) берём из таблицы FLOW_DEFS,
-  // чтобы новый эффект не надо было дописывать здесь.
+  // The same parameters the page sends when it starts a scene.
+  // The effect's properties (one-shot, color from the sliders, brightness swing) come from the FLOW_DEFS table,
+  // so a new effect does not have to be added here.
   const FlowDef *def = findFlow(e);
   argOverlay.clear();
   argOverlay["bg_bright"] = String(br);
@@ -577,19 +579,19 @@ void handleScene() {
 
 // ---------- Wi-Fi ----------
 
-// Причина отключения: 2/202 — ошибка входа, 15 — не подошёл пароль,
-// 201 — сеть не найдена, 205 — сбой соединения
+// Disconnect reason: 2/202 - authentication error, 15 - wrong password,
+// 201 - network not found, 205 - connection failure
 void onWifiEvent(arduino_event_id_t event, arduino_event_info_t info) {
   if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
-    Serial.printf("\nпричина отключения: %d\n", info.wifi_sta_disconnected.reason);
+    Serial.printf("\ndisconnect reason: %d\n", info.wifi_sta_disconnected.reason);
   }
 }
 
 void connectWifi() {
   WiFi.onEvent(onWifiEvent);
   WiFi.mode(WIFI_STA);
-  WiFi.setHostname(WIFI_HOSTNAME);  // так плата будет называться в списке роутера
-  WiFi.setTxPower(WIFI_POWER_8_5dBm);  // на этой плате с полной мощностью радио не работает
+  WiFi.setHostname(WIFI_HOSTNAME);  // this is how the board appears in the router's list
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);  // on this board the radio does not work at full power
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.print("Wi-Fi");
   uint32_t t = millis();
@@ -600,17 +602,17 @@ void connectWifi() {
   Serial.println();
 
   if (WiFi.status() != WL_CONNECTED) {
-    // 1 = сеть не найдена, 4 = неверный пароль
-    Serial.printf("Wi-Fi статус: %d\n", WiFi.status());
-    Serial.println("Сети, которые видит плата:");
-    WiFi.disconnect();  // сканирование не идёт, пока плата пытается подключиться
+    // 1 = network not found, 4 = wrong password
+    Serial.printf("Wi-Fi status: %d\n", WiFi.status());
+    Serial.println("Networks the board can see:");
+    WiFi.disconnect();  // scanning does not run while the board is trying to connect
     delay(500);
     int n = WiFi.scanNetworks();
-    if (n <= 0) Serial.println("  (ничего не найдено)");
+    if (n <= 0) Serial.println("  (nothing found)");
     for (int i = 0; i < n; i++) {
-      Serial.printf("  \"%s\"  канал %d  %d dBm\n", WiFi.SSID(i).c_str(), WiFi.channel(i), WiFi.RSSI(i));
+      Serial.printf("  \"%s\"  channel %d  %d dBm\n", WiFi.SSID(i).c_str(), WiFi.channel(i), WiFi.RSSI(i));
     }
-    WiFi.scanDelete();  // освобождаем память под результаты сканирования
+    WiFi.scanDelete();  // free the memory used for the scan results
   }
 }
 
@@ -618,21 +620,21 @@ void connectWifi() {
 
 void setup() {
   Serial.begin(115200);
-  // USB-порт платы появляется после перезапуска не сразу: ждём монитор до 8 секунд
+  // After a restart the board's USB port does not appear right away: wait for the monitor for up to 8 seconds
   uint32_t t0 = millis();
   while (!Serial && millis() - t0 < 8000) delay(10);
   delay(500);
-  Serial.println("\nстарт");
+  Serial.println("\nstart");
 
-  prefs.begin("lamp", false);  // память для сцен
+  prefs.begin("lamp", false);  // memory for scenes
   connectWifi();
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("Страница: http://");
+    Serial.print("Page: http://");
     Serial.println(WiFi.localIP());
-    Serial.print("MAC платы: ");
+    Serial.print("Board MAC: ");
     Serial.println(WiFi.macAddress());
   } else {
-    Serial.println("Wi-Fi не подключился, проверьте config.h");
+    Serial.println("Wi-Fi did not connect, check config.h");
   }
 
   server.on("/", HTTP_GET, handleRoot);
@@ -651,20 +653,20 @@ void loop() {
   server.handleClient();
   busyUs += micros() - t0;
   if (millis() - busyWindowStart >= 10000) {
-    uint32_t pct = busyUs / ((millis() - busyWindowStart) * 10UL);  // микросекунды в проценты окна
+    uint32_t pct = busyUs / ((millis() - busyWindowStart) * 10UL);  // microseconds to percent of the window
     busyPct = pct > 100 ? 100 : pct;
     busyUs = 0;
     busyWindowStart = millis();
   }
 
-  // Раз в 10 секунд сообщаем состояние, чтобы адрес был виден, даже если монитор открыли поздно
+  // Every 10 seconds print the status so the address is visible even if the monitor was opened late
   static uint32_t lastInfo = 0;
   if (millis() - lastInfo > 10000) {
     lastInfo = millis();
     if (WiFi.status() == WL_CONNECTED) {
-      Serial.printf("Wi-Fi ок, страница: http://%s\n", WiFi.localIP().toString().c_str());
+      Serial.printf("Wi-Fi ok, page: http://%s\n", WiFi.localIP().toString().c_str());
     } else {
-      Serial.printf("Wi-Fi не подключён, статус %d\n", WiFi.status());
+      Serial.printf("Wi-Fi not connected, status %d\n", WiFi.status());
     }
   }
 
