@@ -7,11 +7,11 @@ The project exists because the original remote was lost. The Yeelight cloud is n
 ## Features
 
 - **Main light:** brightness, color temperature, dimming to the minimum and returning to the previous brightness. The "Turn everything off" button turns both lights off.
-- **Backlight:** color, saturation, brightness, a "White" button and "Lock color" (stops an effect on the current color).
+- **Backlight:** color, saturation, brightness and "Lock color" (stops an effect on the current color).
 - **Effects:** Wave, Campfire, Candle, Sunset, Sunrise, Storm, Ocean, Lava, Heartbeat, Garland, Police.
 - **Color cycling:** Rainbow, Warm, Cold, Neon, Pastel, with a "Brightness swing" slider.
 - **Sleep timer:** the backlight fades out over the chosen time (up to 120 minutes on the page, up to 240 through the API).
-- **Scenes:** up to 8 saved backlight settings, stored in the board's memory and kept across reboots.
+- **Scenes:** a built-in "White" button and up to 8 saved backlight settings, stored in the board's memory and kept across reboots.
 - **System block:** chip, memory, server load, temperature, Wi-Fi, IP, board reboot.
 - **Terminal API block:** ready-made `curl` commands with a copy button.
 
