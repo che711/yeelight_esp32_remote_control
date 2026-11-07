@@ -1,13 +1,13 @@
 #pragma once
 
 const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Лампа</title>
+<title>Lamp</title>
 <style>
-  /* Свет страницы берётся у самой лампы: --glow — цвет, которым сейчас горит подсветка */
+  /* The page light comes from the lamp itself: --glow is the color the backlight is showing now */
   @property --glow { syntax:'<color>'; inherits:true; initial-value:#6b7cff; }
   :root { color-scheme: dark; --bg:#0d0f24; --text:#f4f5ff; --dim:#a3a9d6; --line:rgba(255,255,255,.13);
           --field:rgba(255,255,255,.07); --accent:#ffb02e;
@@ -71,7 +71,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
                 border:1px solid var(--line); border-radius:12px; background:var(--field); color:var(--text);
                 font:inherit; font-size:14px; cursor:pointer; transition:box-shadow .2s, border-color .2s; }
   .seg button:active { background:rgba(255,255,255,.2); }
-  /* Цветная полоска внизу кнопки играет так же, как сам эффект; у включённого эффекта она заливает всю кнопку */
+  /* The colored strip at the bottom of a button plays like the effect itself; for the active effect it fills the whole button */
   .seg button[data-v]::after { content:''; position:absolute; z-index:-1; left:0; right:0; bottom:0; height:4px;
         background-image:var(--sw); background-size:250% 100%; background-repeat:no-repeat;
         animation:drift 8s ease-in-out infinite alternate; }
@@ -159,84 +159,68 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 <main>
   <h1>Yeelight Screen Light Bar Pro (YLTD003)</h1>
   <div id="strip"></div>
-  <div id="status">читаю состояние лампы…</div>
+  <div id="status">reading the lamp state…</div>
 
   <details class="card" id="sec_main" style="--tone:#ffd166" open>
-    <summary>Основной свет</summary>
-    <button type="button" id="power" class="pwr" data-on="0" disabled>Основной свет…</button>
-    <button type="button" id="all_off" class="pwr soft" disabled>Выключить всё (основной свет и подсветку)</button>
-    <div class="row"><span>Яркость</span><b id="bright_v"></b></div>
+    <summary>Main light</summary>
+    <button type="button" id="power" class="pwr" data-on="0" disabled>Main light…</button>
+    <button type="button" id="all_off" class="pwr soft" disabled>Turn everything off (main light and backlight)</button>
+    <div class="row"><span>Brightness</span><b id="bright_v"></b></div>
     <input type="range" id="bright" min="1" max="100" autocomplete="off">
-    <div class="row"><span>Цветовая температура</span><b id="ct_v"></b></div>
+    <div class="row"><span>Color temperature</span><b id="ct_v"></b></div>
     <input type="range" id="ct" min="2700" max="6500" step="100" autocomplete="off">
   </details>
 
   <details class="card" id="sec_bg" style="--tone:var(--glow)" open>
-    <summary>Подсветка сзади</summary>
-    <button type="button" id="bg_power" class="pwr" data-on="0" disabled>Подсветка…</button>
-    <div class="row"><span>Яркость</span><b id="bg_bright_v"></b></div>
+    <summary>Backlight</summary>
+    <button type="button" id="bg_power" class="pwr" data-on="0" disabled>Backlight…</button>
+    <div class="row"><span>Brightness</span><b id="bg_bright_v"></b></div>
     <input type="range" id="bg_bright" min="1" max="100" autocomplete="off">
-    <div class="row"><span>Эффект</span></div>
+    <div class="row"><span>Effect</span></div>
     <div id="bg_effect">
-    <div class="seg">
-      <button type="button" data-v="off" class="on">Нет</button>
-      <button type="button" data-v="wave">Волна</button>
-      <button type="button" data-v="fire">Костёр</button>
-      <button type="button" data-v="candle">Свеча</button>
-      <button type="button" data-v="sunset">Закат</button>
-      <button type="button" data-v="sunrise">Рассвет</button>
-      <button type="button" data-v="storm">Гроза</button>
-      <button type="button" data-v="ocean">Океан</button>
-      <button type="button" data-v="lava">Лава</button>
-      <button type="button" data-v="heart">Сердцебиение</button>
-      <button type="button" data-v="garland">Гирлянда</button>
-      <button type="button" data-v="police">Мигалка</button>
+    <!-- The effect and color-cycling buttons are built from the EFFECTS table in the script -->
+    <div class="seg" id="seg_fx">
+      <button type="button" data-v="off" class="on">None</button>
     </div>
-    <div class="row"><span>Переливание</span></div>
-    <div class="seg">
-      <button type="button" data-v="rainbow">Радуга</button>
-      <button type="button" data-v="warm">Тёплая</button>
-      <button type="button" data-v="cold">Холодная</button>
-      <button type="button" data-v="neon">Неон</button>
-      <button type="button" data-v="pastel">Пастель</button>
+    <div class="row"><span>Color cycling</span></div>
+    <div class="seg" id="seg_pal"></div>
     </div>
-    </div>
-    <div class="seg"><button type="button" id="bg_lock">Зафиксировать цвет</button></div>
-    <div class="row"><span id="flow_name">Время одного шага</span><b id="flow_s_v"></b></div>
+    <div class="seg"><button type="button" id="bg_lock">Lock color</button></div>
+    <div class="row"><span id="flow_name">Step time</span><b id="flow_s_v"></b></div>
     <input type="range" id="flow_s" min="1" max="20" value="3" autocomplete="off">
-    <div class="row"><span>Размах яркости (переливание)</span><b id="swing_v"></b></div>
+    <div class="row"><span>Brightness swing (color cycling)</span><b id="swing_v"></b></div>
     <input type="range" id="swing" min="0" max="90" value="0" autocomplete="off">
-    <div class="row"><span>Цвет</span><b id="hue_v"></b></div>
+    <div class="row"><span>Color</span><b id="hue_v"></b></div>
     <input type="range" id="hue" min="0" max="359" autocomplete="off">
-    <div class="row"><span>Насыщенность</span><b id="sat_v"></b></div>
+    <div class="row"><span>Saturation</span><b id="sat_v"></b></div>
     <input type="range" id="sat" min="0" max="100" autocomplete="off">
-    <button id="white" type="button">Белый</button>
+    <button id="white" type="button">White</button>
     <div id="swatch"></div>
-    <div class="row"><span>Таймер сна</span><b id="sleep_m_v"></b></div>
+    <div class="row"><span>Sleep timer</span><b id="sleep_m_v"></b></div>
     <input type="range" id="sleep_m" min="1" max="120" value="30" autocomplete="off">
     <div class="seg">
-      <button type="button" id="sleep_go">Запустить таймер</button>
-      <button type="button" id="sleep_stop">Отменить</button>
+      <button type="button" id="sleep_go">Start timer</button>
+      <button type="button" id="sleep_stop">Cancel</button>
     </div>
     <div id="sleep_note"></div>
   </details>
 
   <details class="card" id="sec_scenes" style="--tone:#9b8cff" open>
-    <summary>Сцены подсветки</summary>
+    <summary>Backlight scenes</summary>
     <div id="scene_list"></div>
     <div id="scene_row">
-      <input type="text" id="scene_name" maxlength="20" placeholder="Название сцены" autocomplete="off">
-      <button type="button" id="scene_save">Сохранить текущую</button>
+      <input type="text" id="scene_name" maxlength="20" placeholder="Scene name" autocomplete="off">
+      <button type="button" id="scene_save">Save current</button>
     </div>
     <div id="scene_note"></div>
   </details>
 
   <details class="card" id="sec_api" style="--tone:#ff7ab8">
-    <summary>API для терминала (curl)</summary>
-    <div class="kv"><span>Адрес платы</span><span id="api_base">—</span></div>
+    <summary>Terminal API (curl)</summary>
+    <div class="kv"><span>Board address</span><span id="api_base">—</span></div>
     <div class="ex">
-      <div class="t">Текущие настройки подсветки одной командой</div>
-      <div class="code"><code id="api_now"></code><button type="button" id="api_now_copy">Копировать</button></div>
+      <div class="t">Current backlight settings as one command</div>
+      <div class="code"><code id="api_now"></code><button type="button" id="api_now_copy">Copy</button></div>
     </div>
     <div id="api_list"></div>
     <div class="params" id="api_params"></div>
@@ -244,74 +228,107 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
   <details class="card" id="sec_sys" style="--tone:#3de0c8" open>
     <summary>System</summary>
-    <div class="kv"><span>Плата</span><span id="sys_chip">—</span></div>
-    <div class="kv"><span>Время работы</span><span id="sys_uptime">—</span></div>
-    <div class="kv"><span>Память (куча)</span><span id="sys_heap">—</span></div>
+    <div class="kv"><span>Board</span><span id="sys_chip">—</span></div>
+    <div class="kv"><span>Uptime</span><span id="sys_uptime">—</span></div>
+    <div class="kv"><span>Memory (heap)</span><span id="sys_heap">—</span></div>
     <div class="bar"><i id="sys_heap_bar"></i></div>
-    <div class="kv"><span>Минимум свободной памяти</span><span id="sys_heap_min">—</span></div>
-    <div class="kv"><span>Прошивка</span><span id="sys_sketch">—</span></div>
+    <div class="kv"><span>Minimum free memory</span><span id="sys_heap_min">—</span></div>
+    <div class="kv"><span>Firmware</span><span id="sys_sketch">—</span></div>
     <div class="bar"><i id="sys_sketch_bar"></i></div>
-    <div class="kv"><span>Занятость сервера</span><span id="sys_busy">—</span></div>
+    <div class="kv"><span>Server load</span><span id="sys_busy">—</span></div>
     <div class="bar"><i id="sys_busy_bar"></i></div>
-    <div class="kv"><span>Температура чипа</span><span id="sys_temp">—</span></div>
+    <div class="kv"><span>Chip temperature</span><span id="sys_temp">—</span></div>
     <div class="kv"><span>Wi-Fi</span><span id="sys_wifi">—</span></div>
-    <div class="kv"><span>IP-адрес</span><span id="sys_ip">—</span></div>
-    <div class="kv"><span>MAC-адрес</span><span id="sys_mac">—</span></div>
-    <button id="reboot" type="button">Перезагрузить плату</button>
+    <div class="kv"><span>IP address</span><span id="sys_ip">—</span></div>
+    <div class="kv"><span>MAC address</span><span id="sys_mac">—</span></div>
+    <button id="reboot" type="button">Reboot the board</button>
     <div id="sys_note"></div>
   </details>
 </main>
 
 <script>
 const $ = id => document.getElementById(id);
-const suffix = { bright:'%', ct:' K', bg_bright:'%', hue:'°', sat:'%', flow_s:' с', swing:'%', sleep_m:' мин' };
-// Полоска-образец для эффектов с готовыми цветами
-const SWATCHES = {
-  rainbow: 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)',
-  warm:    'linear-gradient(90deg,#ff3b00,#ff6a00,#ffa000,#ffc833,#ff2d55,#ff8a3d)',
-  cold:    'linear-gradient(90deg,#0066ff,#00b4ff,#00e0d0,#6a5cff,#00a0a0,#3aa0ff)',
-  neon:    'linear-gradient(90deg,#f0f,#0ff,#39ff14,#ff1493,#1f51ff,#ff0)',
-  pastel:  'linear-gradient(90deg,#ffb3ba,#ffdfba,#ffffba,#baffc9,#bae1ff,#e0bbff)',
-  fire:    'linear-gradient(90deg,#c21800,#ff6a00,#ffb400,#ff3c00,#ff8c00,#ff2800)',
-  candle:  'linear-gradient(90deg,#ff8a1f,#ffb04a,#ff8a1f,#ffa23a,#ff8a1f)',
-  sunset:  'linear-gradient(90deg,#ffe9c8,#ffb347,#ff7a18,#e8431a,#8b1a1a,#300606)',
-  sunrise: 'linear-gradient(90deg,#300606,#8b1a1a,#e8431a,#ff7a18,#ffb347,#ffe9c8)',
-  storm:   'linear-gradient(90deg,#0b1238,#fff,#0b1238,#0a0f2e,#fff,#101c4a)',
-  ocean:   'linear-gradient(90deg,#00a8a8,#0066cc,#2a00b8,#00c878,#00b4d8,#5a1ab8)',
-  lava:    'linear-gradient(90deg,#600000,#c81e00,#ff7a00,#c81e00,#600000)',
-  garland: 'linear-gradient(90deg,#f00 0 25%,#0c0 25% 50%,#fc0 50% 75%,#00f 75%)',
-  police:  'linear-gradient(90deg,#f00 0 50%,#00f 50%)'
+const suffix = { bright:'%', ct:' K', bg_bright:'%', hue:'°', sat:'%', flow_s:' s', swing:'%', sleep_m:' min' };
+
+// All backlight effects in one table; the row order is the button order.
+// A new effect: a row here + a row in FLOW_DEFS in main.cpp (the animation of the button strip can be added in CSS).
+//   board - the name sent to the board (for the rainbow it is "on"); label - button text;
+//   group - 'fx' (the "Effect" block) or 'pal' (the "Color cycling" block);
+//   kind  - 'color': the color comes from the sliders; 'timed': runs once over the given time (minutes);
+//           'palette': "Brightness swing" works; no kind - a plain effect;
+//   sw - a sample strip with the effect's colors; glow - the page glow color;
+//   btn - the strip on the button, if it must differ from sw.
+const EFFECTS = {
+  wave:    { board: 'wave',    label: 'Wave',      group: 'fx',  kind: 'color',
+             btn: 'linear-gradient(90deg,#1b1b2b,#ff6bd6,#1b1b2b)' },
+  fire:    { board: 'fire',    label: 'Campfire',  group: 'fx',
+             sw: 'linear-gradient(90deg,#c21800,#ff6a00,#ffb400,#ff3c00,#ff8c00,#ff2800)', glow: '#ff6a00' },
+  candle:  { board: 'candle',  label: 'Candle',    group: 'fx',
+             sw: 'linear-gradient(90deg,#ff8a1f,#ffb04a,#ff8a1f,#ffa23a,#ff8a1f)', glow: '#ffa23a' },
+  sunset:  { board: 'sunset',  label: 'Sunset',    group: 'fx',  kind: 'timed',
+             sw: 'linear-gradient(90deg,#ffe9c8,#ffb347,#ff7a18,#e8431a,#8b1a1a,#300606)', glow: '#ff7a18' },
+  sunrise: { board: 'sunrise', label: 'Sunrise',   group: 'fx',  kind: 'timed',
+             sw: 'linear-gradient(90deg,#300606,#8b1a1a,#e8431a,#ff7a18,#ffb347,#ffe9c8)', glow: '#ffb347' },
+  storm:   { board: 'storm',   label: 'Storm',     group: 'fx',
+             sw: 'linear-gradient(90deg,#0b1238,#fff,#0b1238,#0a0f2e,#fff,#101c4a)', glow: '#7aa2ff' },
+  ocean:   { board: 'ocean',   label: 'Ocean',     group: 'fx',
+             sw: 'linear-gradient(90deg,#00a8a8,#0066cc,#2a00b8,#00c878,#00b4d8,#5a1ab8)', glow: '#00c8c0' },
+  lava:    { board: 'lava',    label: 'Lava',      group: 'fx',
+             sw: 'linear-gradient(90deg,#600000,#c81e00,#ff7a00,#c81e00,#600000)', glow: '#ff3a00' },
+  heart:   { board: 'heart',   label: 'Heartbeat', group: 'fx',  kind: 'color',
+             btn: 'linear-gradient(90deg,#3a0014,#ff2d55,#3a0014)' },
+  garland: { board: 'garland', label: 'Garland',   group: 'fx',
+             sw: 'linear-gradient(90deg,#f00 0 25%,#0c0 25% 50%,#fc0 50% 75%,#00f 75%)', glow: '#38d66b' },
+  police:  { board: 'police',  label: 'Police',    group: 'fx',
+             sw: 'linear-gradient(90deg,#f00 0 50%,#00f 50%)', glow: '#ff3040' },
+  rainbow: { board: 'on',      label: 'Rainbow',   group: 'pal', kind: 'palette',
+             sw: 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)', glow: '#b46cff' },
+  warm:    { board: 'warm',    label: 'Warm',      group: 'pal', kind: 'palette',
+             sw: 'linear-gradient(90deg,#ff3b00,#ff6a00,#ffa000,#ffc833,#ff2d55,#ff8a3d)', glow: '#ff7a2a' },
+  cold:    { board: 'cold',    label: 'Cold',      group: 'pal', kind: 'palette',
+             sw: 'linear-gradient(90deg,#0066ff,#00b4ff,#00e0d0,#6a5cff,#00a0a0,#3aa0ff)', glow: '#2aa8ff' },
+  neon:    { board: 'neon',    label: 'Neon',      group: 'pal', kind: 'palette',
+             sw: 'linear-gradient(90deg,#f0f,#0ff,#39ff14,#ff1493,#1f51ff,#ff0)', glow: '#ff2fe0' },
+  pastel:  { board: 'pastel',  label: 'Pastel',    group: 'pal', kind: 'palette',
+             sw: 'linear-gradient(90deg,#ffb3ba,#ffdfba,#ffffba,#baffc9,#bae1ff,#e0bbff)', glow: '#ffb3d9' }
 };
-// Цвет свечения страницы для каждого эффекта (у «обычного цвета», волны и сердцебиения он берётся с ползунков)
-const GLOW = { rainbow: '#b46cff', warm: '#ff7a2a', cold: '#2aa8ff', neon: '#ff2fe0', pastel: '#ffb3d9', fire: '#ff6a00',
-               candle: '#ffa23a', sunset: '#ff7a18', sunrise: '#ffb347', storm: '#7aa2ff', ocean: '#00c8c0',
-               lava: '#ff3a00', garland: '#38d66b', police: '#ff3040' };
-// Эффекты, у которых цвет выбирается ползунками, и эффекты, которые идут один раз заданное время
-const COLOR_EFFECTS = ['wave', 'heart'];
-const PALETTE_EFFECTS = ['rainbow', 'warm', 'cold', 'neon', 'pastel'];  // переливания: у них работает «Размах яркости»
-const TIMED_EFFECTS = ['sunset', 'sunrise'];
-// Название на странице и название для платы (у переливания оно «on»)
-const EFFECT_TO_BOARD = { rainbow: 'on', wave: 'wave', fire: 'fire', candle: 'candle', sunset: 'sunset', sunrise: 'sunrise',
-                          storm: 'storm', ocean: 'ocean', lava: 'lava', heart: 'heart', garland: 'garland', police: 'police',
-                          warm: 'warm', cold: 'cold', neon: 'neon', pastel: 'pastel' };
-// Цветная полоска на каждой кнопке эффекта: видно, какие цвета он даёт
-const BUTTON_SW = Object.assign({}, SWATCHES, {
-  wave: 'linear-gradient(90deg,#1b1b2b,#ff6bd6,#1b1b2b)',
-  heart: 'linear-gradient(90deg,#3a0014,#ff2d55,#3a0014)' });
-document.querySelectorAll('#bg_effect button[data-v]').forEach(b => {
-  const g = BUTTON_SW[b.dataset.v];
+
+// Everything else is derived from the table
+const SWATCHES = {};          // sample strip
+const GLOW = {};              // page glow color (effects with the color from the sliders have none)
+const EFFECT_TO_BOARD = {};   // name on the page -> name for the board
+const EFFECT_FROM_BOARD = {}; // name for the board -> name on the page
+const COLOR_EFFECTS = [];     // the color is chosen with the sliders
+const PALETTE_EFFECTS = [];   // color cycling: "Brightness swing" works for them
+const TIMED_EFFECTS = [];     // run once over the given time
+for (const [key, e] of Object.entries(EFFECTS)) {
+  EFFECT_TO_BOARD[key] = e.board;
+  EFFECT_FROM_BOARD[e.board] = key;
+  if (e.sw) SWATCHES[key] = e.sw;
+  if (e.glow) GLOW[key] = e.glow;
+  if (e.kind === 'color') COLOR_EFFECTS.push(key);
+  if (e.kind === 'palette') PALETTE_EFFECTS.push(key);
+  if (e.kind === 'timed') TIMED_EFFECTS.push(key);
+  // The effect button with a colored strip: you can see which colors it gives
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.v = key;
+  b.textContent = e.label;
+  const g = e.btn || e.sw;
   if (g) b.style.setProperty('--sw', g);
-});
-let flowSec = 3;    // время одного шага, секунды (у обычных эффектов)
-let flowMin = 10;   // общая длительность, минуты (у заката и рассвета)
+  $(e.group === 'pal' ? 'seg_pal' : 'seg_fx').append(b);
+}
+
+let flowSec = 3;    // time of one step, seconds (for plain effects)
+let flowMin = 10;   // total duration, minutes (for sunset and sunrise)
 let lastAction = 0;
 let inflight = false;
 let queued = {};
-let urgent = false;         // команда от кнопки: отправляем сразу, без ожидания паузы между запросами
-let stateLoaded = false;    // состояние лампы прочитано хотя бы раз
+let urgent = false;         // a command from a button: send at once, without waiting for the pause between requests
+let stateLoaded = false;    // the lamp state has been read at least once
 
-// ---------- Кнопки включения ----------
-// Состояние хранится в data-on, а подпись и цвет кнопки меняются вместе с ним
+// ---------- Power buttons ----------
+// The state is kept in data-on, and the button text and color change with it
 
 function isOn(id) { return $(id).dataset.on === '1'; }
 
@@ -319,15 +336,15 @@ function setOn(id, on) {
   const b = $(id);
   b.dataset.on = on ? '1' : '0';
   b.classList.toggle('on', on);
-  b.textContent = on ? 'Подсветка: включена' : 'Подсветка: выключена';
+  b.textContent = on ? 'Backlight: on' : 'Backlight: off';
   updateGlow();
 }
 
-// Основной свет не выключается: лампа гасит оба света сразу, поэтому у него три состояния:
-// on — горит, dim — приглушён до минимальной яркости (подсветка при этом не мигает), off — лампа выключена целиком
+// The main light is never turned off: the lamp turns both lights off at once, so it has three states:
+// on - lit, dim - dimmed to the minimum brightness (the backlight does not blink), off - the whole lamp is off
 let mainMode = 'off';
-let mainSaved = 70;  // яркость до приглушения
-const MAIN_LABELS = { on: 'Основной свет: включён', dim: 'Основной свет: приглушён', off: 'Основной свет: выключен' };
+let mainSaved = 70;  // brightness before dimming
+const MAIN_LABELS = { on: 'Main light: on', dim: 'Main light: dimmed', off: 'Main light: off' };
 
 function setMain(mode) {
   mainMode = mode;
@@ -338,7 +355,7 @@ function setMain(mode) {
   b.textContent = MAIN_LABELS[mode];
 }
 
-// ---------- Сворачиваемые блоки ----------
+// ---------- Collapsible blocks ----------
 
 document.querySelectorAll('details.card').forEach(d => {
   try {
@@ -353,15 +370,15 @@ document.querySelectorAll('details.card').forEach(d => {
   });
 });
 
-// ---------- Лампа ----------
+// ---------- Lamp ----------
 
 function setStatus(ok) {
   const s = $('status');
-  s.textContent = ok ? 'лампа на связи' : 'лампа не отвечает';
+  s.textContent = ok ? 'lamp connected' : 'lamp not responding';
   s.className = ok ? '' : 'bad';
 }
 
-function effect() {  // off или название эффекта
+function effect() {  // off or the name of an effect
   const b = document.querySelector('#bg_effect button.on');
   return b ? b.dataset.v : 'off';
 }
@@ -374,18 +391,18 @@ function usesColor() { return COLOR_EFFECTS.includes(effect()); }
 function isTimed() { return TIMED_EFFECTS.includes(effect()); }
 function isPalette() { return PALETTE_EFFECTS.includes(effect()); }
 
-// Ползунок времени: у заката и рассвета это длительность в минутах, у остальных время одного шага в секундах
+// The time slider: for sunset and sunrise it is the duration in minutes, for the rest the time of one step in seconds
 function applyFlowSlider() {
   const t = isTimed();
   $('flow_s').max = t ? 30 : 20;
   $('flow_s').value = t ? flowMin : flowSec;
-  $('flow_name').textContent = t ? 'Длительность' : 'Время одного шага';
-  suffix.flow_s = t ? ' мин' : ' с';
+  $('flow_name').textContent = t ? 'Duration' : 'Step time';
+  suffix.flow_s = t ? ' min' : ' s';
   updateLabel('flow_s');
 }
 
-// Параметры запуска эффекта: цвета лампа крутит сама.
-// Всем нужны скорость и яркость, волне и сердцебиению ещё и цвет.
+// Parameters for starting an effect: the lamp cycles the colors itself.
+// All effects need the speed and brightness; wave and heartbeat also need the color.
 function flowParams() {
   const p = { bg_flow: EFFECT_TO_BOARD[effect()], flow_ms: $('flow_s').value * (isTimed() ? 60000 : 1000),
               bg_bright: $('bg_bright').value };
@@ -404,7 +421,7 @@ function updateSwatch() {
   renderApiNow();
 }
 
-// Вся страница светится цветом подсветки: фон, полоска под заголовком, бегунки. Подсветка выключена: приглушённый серо-синий
+// The whole page glows with the backlight color: background, the strip under the title, the thumbs. Backlight off: a muted gray-blue
 function updateGlow() {
   const root = document.documentElement.style;
   const e = effect();
@@ -433,7 +450,7 @@ function updateLabel(id) {
   renderApiNow();
 }
 
-// Обратное преобразование: число 0xRRGGBB от лампы в тон и насыщенность для ползунков
+// The reverse conversion: a 0xRRGGBB number from the lamp to hue and saturation for the sliders
 function rgbToHs(n) {
   const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
   const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
@@ -447,7 +464,7 @@ function rgbToHs(n) {
   return { hue: Math.round(h) % 360, sat: mx ? Math.round(d / mx * 100) : 0 };
 }
 
-// HSV (яркость 100%) в цвет для полоски-образца; при насыщенности 0 получается белый
+// HSV (brightness 100%) to a color for the sample strip; at saturation 0 the result is white
 function hsvCss(h, s) {
   const c = s / 100;
   const x = c * (1 - Math.abs((h / 60) % 2 - 1));
@@ -463,16 +480,16 @@ function hsvCss(h, s) {
   return 'rgb(' + to255(r) + ',' + to255(g) + ',' + to255(b) + ')';
 }
 
-// Лампа принимает около 60 команд в минуту, при превышении она замолкает на минуту и дольше.
-// Поэтому запросы от ползунков уходят не чаще раза в 1,2 с, а при движении копится последнее значение.
-// Нажатия кнопок и переключателей отправляются сразу (urgent), они редкие и ждать им незачем.
+// The lamp accepts about 60 commands per minute; above that it goes silent for a minute or more.
+// So requests from the sliders go out no more than once per 1.2 s, and while a slider moves only the last value is kept.
+// Button and switch presses are sent at once (urgent): they are rare and there is no reason to wait.
 const MIN_GAP_MS = 1200;
 let lastSent = 0;
 let timer = null;
-let syncAfterSend = false;  // после команды читаем состояние лампы: 'lock' — ещё и цвет, 'state' — только переключатели
+let syncAfterSend = false;  // after a command read the lamp state: 'lock' - the color too, 'state' - only the switches
 
 function queue(params, now) {
-  // Любая другая команда подсветке отменяет таймер сна на лампе, значит, и обратный отсчёт на странице
+  // Any other backlight command cancels the sleep timer on the lamp, and so the countdown on the page
   if (!('bg_sleep' in params) && ['hue', 'bg_flow', 'bg_bright', 'bg_power'].some(k => k in params)) sleepEnd = 0;
   Object.assign(queued, params);
   lastAction = Date.now();
@@ -481,7 +498,7 @@ function queue(params, now) {
 }
 
 function schedule() {
-  if (inflight) return;  // после ответа flush() вызовет schedule() снова
+  if (inflight) return;  // after the reply flush() calls schedule() again
   if (timer) {
     if (!urgent) return;
     clearTimeout(timer);
@@ -492,7 +509,7 @@ function schedule() {
   timer = setTimeout(() => { timer = null; flush(); }, wait);
 }
 
-// fetch с ограничением по времени: без него зависший запрос навсегда блокирует очередь команд
+// fetch with a time limit: without it a hung request blocks the command queue forever
 function fetchJson(url, ms) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
@@ -533,13 +550,13 @@ function flush() {
   });
 });
 
-// Кнопки эффектов: нажатие сразу запускает эффект или останавливает его
+// Effect buttons: a press starts the effect at once or stops it
 $('bg_effect').addEventListener('click', e => {
   const b = e.target.closest('button[data-v]');
   if (!b || b.dataset.v === effect()) return;
   setEffect(b.dataset.v);
   updateSwatch();
-  if (flowOn()) setOn('bg_power', true);  // эффект сам включает подсветку
+  if (flowOn()) setOn('bg_power', true);  // an effect turns the backlight on by itself
   queue(flowOn() ? flowParams() : { bg_flow: 'off' }, true);
 });
 
@@ -548,13 +565,13 @@ $('swing').addEventListener('input', () => {
   if (isPalette()) queue(flowParams());
 });
 
-// Пока эффект включён, яркость меняем, перезапуская его с новой яркостью
+// While an effect is on, we change the brightness by restarting it with the new brightness
 $('bg_bright').addEventListener('input', () => {
   updateLabel('bg_bright');
   queue(flowOn() ? flowParams() : { bg_bright: $('bg_bright').value });
 });
 
-// Остановить эффект на том цвете, который сейчас горит. Кнопка остаётся на месте и работает всегда
+// Stop the effect on the color that is lit now. The button stays in place and always works
 $('bg_lock').addEventListener('click', () => {
   if (flowOn()) {
     setEffect('off');
@@ -562,7 +579,7 @@ $('bg_lock').addEventListener('click', () => {
     syncAfterSend = 'lock';
     queue({ bg_flow: 'off' }, true);
   } else {
-    refresh(true, true);  // эффекта нет: просто считываем цвет с лампы в ползунки
+    refresh(true, true);  // no effect: just read the color from the lamp into the sliders
   }
 });
 
@@ -572,8 +589,8 @@ $('flow_s').addEventListener('input', () => {
   if (flowOn()) queue(flowParams());
 });
 
-// Ручной выбор цвета выключает переливание и костёр; волна при этом просто меняет цвет.
-// Яркость отправляем вместе с цветом: сервер выходит из эффекта одной командой.
+// Picking a color by hand turns off color cycling and the campfire; the wave just changes its color.
+// The brightness is sent together with the color: the server leaves the effect with one command.
 function leaveRainbow() {
   if (effect() === 'off' || usesColor()) return {};
   setEffect('off');
@@ -583,8 +600,8 @@ function leaveRainbow() {
 ['hue', 'sat'].forEach(id => {
   $(id).addEventListener('input', () => {
     const stop = leaveRainbow();
-    // При насыщенности 0 цвет всегда белый, поэтому ползунок цвета ничего бы не менял.
-    // Если после «Белого» двигают цвет, возвращаем насыщенность на максимум.
+    // At saturation 0 the color is always white, so the hue slider would change nothing.
+    // If the hue is moved after "White", we put the saturation back to the maximum.
     if (id === 'hue' && +$('sat').value === 0) {
       $('sat').value = 100;
       updateLabel('sat');
@@ -602,9 +619,9 @@ $('white').addEventListener('click', () => {
 });
 
 $('power').addEventListener('click', () => {
-  syncAfterSend = 'state';  // через секунду сверяем кнопки с лампой
+  syncAfterSend = 'state';  // in a second we check the buttons against the lamp
   if (mainMode === 'on') {
-    // Приглушаем до минимума, подсветку не трогаем
+    // Dim to the minimum, leave the backlight alone
     const cur = +$('bright').value;
     if (cur > 1) mainSaved = cur;
     $('bright').value = 1;
@@ -612,7 +629,7 @@ $('power').addEventListener('click', () => {
     setMain('dim');
     queue({ main: 'dim', main_save: mainSaved }, true);
   } else {
-    // Возвращаем прежнюю яркость; если лампа была выключена целиком, сначала включаем её
+    // Return the previous brightness; if the whole lamp was off, turn it on first
     const wasOff = mainMode === 'off';
     $('bright').value = mainSaved;
     updateLabel('bright');
@@ -620,13 +637,13 @@ $('power').addEventListener('click', () => {
     const params = { main: 'restore' };
     if (wasOff) {
       params.power = 'on';
-      if (!isOn('bg_power')) params.bg_power = 'off';  // лампа зажигает оба света, а подсветка была выключена
+      if (!isOn('bg_power')) params.bg_power = 'off';  // the lamp turns both lights on, but the backlight was off
     }
     queue(params, true);
   }
 });
 
-// Выключает обе лампы сразу: подсветка тоже гаснет, эффекты и таймер сна сбрасываются
+// Turns both lights off at once: the backlight goes out too, effects and the sleep timer are reset
 $('all_off').addEventListener('click', () => {
   setMain('off');
   setOn('bg_power', false);
@@ -646,48 +663,46 @@ $('bg_power').addEventListener('click', () => {
     updateSwatch();
     queue({ bg_power: 'off' }, true);
   } else if (flowOn()) {
-    // Если эффект выбран, подсветка включается сразу им
+    // If an effect is chosen, the backlight turns on with it at once
     queue(flowParams(), true);
   } else {
-    // Включая подсветку, сразу задаём цвет: так она загорается цветным светом, а не в «последнем» режиме лампы
+    // When turning the backlight on, set the color at once: it lights up in color instead of the lamp's "last" mode
     queue({ bg_power: 'on', hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value }, true);
   }
 });
 
-// ---------- Состояние лампы ----------
+// ---------- Lamp state ----------
 
 let refreshing = false;
-const EFFECT_FROM_BOARD = { warm: 'warm', cold: 'cold', neon: 'neon', pastel: 'pastel', on: 'rainbow', wave: 'wave', fire: 'fire', candle: 'candle', sunset: 'sunset', sunrise: 'sunrise',
-                            storm: 'storm', ocean: 'ocean', lava: 'lava', heart: 'heart', garland: 'garland', police: 'police' };
 
-// force — не ждать паузы после действий; applyColor — ещё и поставить ползунки цвета на цвет лампы
+// force - do not wait for the pause after actions; applyColor - also set the color sliders to the lamp's color
 function refresh(force, applyColor) {
   if (inflight || timer || refreshing) return;
-  if (!force && Date.now() - lastAction < 5000) return;  // не мешаем, пока двигаете ползунок
+  if (!force && Date.now() - lastAction < 5000) return;  // do not interfere while a slider is being moved
   refreshing = true;
   const actionAtStart = lastAction;
   fetchJson('/api/state', 10000)
     .then(j => {
       setStatus(j.ok);
       if (!j.ok) return;
-      if (!force && lastAction !== actionAtStart) return;  // пока шёл запрос, трогали ползунки: ответ устарел
+      if (!force && lastAction !== actionAtStart) return;  // the sliders were touched while the request ran: the reply is stale
       if (j.main_saved > 1) mainSaved = j.main_saved;
       setMain(j.power !== 'on' ? 'off' : (j.bright <= 1 ? 'dim' : 'on'));
       setOn('bg_power', j.bg_power === 'on');
-      if (!stateLoaded) {  // кнопки включения ждут первого ответа лампы, чтобы не показывать выдуманное состояние
+      if (!stateLoaded) {  // the power buttons wait for the first lamp reply so they do not show an invented state
         stateLoaded = true;
         $('power').disabled = false;
         $('all_off').disabled = false;
         $('bg_power').disabled = false;
       }
-      // Лампа сообщает, идёт ли эффект; какой именно, помнит плата. Если плата перезагружалась, считаем переливанием
+      // The lamp tells whether an effect is running; which one is remembered by the board. If the board rebooted, we assume color cycling
       let flowing = false;
       if (j.bg_flow === '0') {
         setEffect('off');
         sleepEnd = 0;
         renderSleep();
       } else if (j.bg_flow === '1' && j.effect === 'sleep') {
-        flowing = true;  // идёт таймер сна: эффекта нет, но есть обратный отсчёт
+        flowing = true;  // the sleep timer is running: there is no effect, but there is a countdown
         setEffect('off');
         if (j.sleep_left > 0) { sleepEnd = Date.now() + j.sleep_left * 1000; renderSleep(); }
       } else if (j.bg_flow === '1') {
@@ -705,7 +720,7 @@ function refresh(force, applyColor) {
         }
       }
       ['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(id => {
-        // Во время эффекта цвет лампы меняется, ползунки цвета не трогаем
+        // During an effect the lamp color keeps changing, so the color sliders are left alone
         const skip = flowing && (id === 'hue' || id === 'sat');
         if (!skip && j[id] !== undefined) $(id).value = j[id];
         updateLabel(id);
@@ -716,7 +731,7 @@ function refresh(force, applyColor) {
         updateLabel('hue');
         updateLabel('sat');
       }
-      // После фиксации ставим ползунки цвета на тот цвет, где остановилась лампа
+      // After locking, set the color sliders to the color where the lamp stopped
       if (applyColor === true && j.rgb > 0) {
         const hs = rgbToHs(j.rgb);
         $('hue').value = hs.hue;
@@ -730,47 +745,49 @@ function refresh(force, applyColor) {
     .finally(() => { refreshing = false; });
 }
 
-// ---------- API для терминала ----------
+// ---------- Terminal API ----------
 
 const API_EXAMPLES = [
-  ['Состояние лампы', b => `curl ${b}/api/state`],
-  ['Приглушить основной свет', b => `curl "${b}/api/set?main=dim"`],
-  ['Вернуть яркость основного света', b => `curl "${b}/api/set?main=restore"`],
-  ['Яркость и температура основного света', b => `curl "${b}/api/set?bright=60&ct=4000"`],
-  ['Включить подсветку красным', b => `curl "${b}/api/set?bg_power=on&hue=0&sat=100&bg_bright=80"`],
-  ['Белая подсветка', b => `curl "${b}/api/set?bg_power=on&hue=0&sat=0&bg_bright=80"`],
-  ['Костёр, шаг 2 секунды', b => `curl "${b}/api/set?bg_flow=fire&flow_ms=2000&bg_bright=80"`],
-  ['Неон с размахом яркости', b => `curl "${b}/api/set?bg_flow=neon&flow_ms=3000&swing=40&bg_bright=90"`],
-  ['Волна синим цветом', b => `curl "${b}/api/set?bg_flow=wave&flow_ms=3000&hue=220&sat=100&bg_bright=80"`],
-  ['Закат за 15 минут', b => `curl "${b}/api/set?bg_flow=sunset&flow_ms=900000&bg_bright=70"`],
-  ['Таймер сна на 30 минут', b => `curl "${b}/api/set?bg_sleep=30&hue=30&sat=80&bg_bright=60"`],
-  ['Остановить эффект', b => `curl "${b}/api/set?bg_flow=off"`],
-  ['Выключить подсветку', b => `curl "${b}/api/set?bg_power=off"`],
-  ['Выключить всё', b => `curl "${b}/api/set?power=off"`],
-  ['Список сохранённых сцен', b => `curl ${b}/api/scenes`],
-  ['Включить сцену по названию', b => `curl -G "${b}/api/scene" --data-urlencode "name=Вечер"`],
-  ['Данные о плате', b => `curl ${b}/api/system`],
-  ['Перезагрузить плату', b => `curl -X POST ${b}/api/reboot`],
+  ['Lamp state', b => `curl ${b}/api/state`],
+  ['Dim the main light', b => `curl "${b}/api/set?main=dim"`],
+  ['Restore the main light brightness', b => `curl "${b}/api/set?main=restore"`],
+  ['Main light brightness and temperature', b => `curl "${b}/api/set?bright=60&ct=4000"`],
+  ['Turn the backlight on in red', b => `curl "${b}/api/set?bg_power=on&hue=0&sat=100&bg_bright=80"`],
+  ['White backlight', b => `curl "${b}/api/set?bg_power=on&hue=0&sat=0&bg_bright=80"`],
+  ['Campfire, 2 second step', b => `curl "${b}/api/set?bg_flow=fire&flow_ms=2000&bg_bright=80"`],
+  ['Neon with brightness swing', b => `curl "${b}/api/set?bg_flow=neon&flow_ms=3000&swing=40&bg_bright=90"`],
+  ['Blue wave', b => `curl "${b}/api/set?bg_flow=wave&flow_ms=3000&hue=220&sat=100&bg_bright=80"`],
+  ['Sunset over 15 minutes', b => `curl "${b}/api/set?bg_flow=sunset&flow_ms=900000&bg_bright=70"`],
+  ['Sleep timer for 30 minutes', b => `curl "${b}/api/set?bg_sleep=30&hue=30&sat=80&bg_bright=60"`],
+  ['Stop the effect', b => `curl "${b}/api/set?bg_flow=off"`],
+  ['Turn the backlight off', b => `curl "${b}/api/set?bg_power=off"`],
+  ['Turn everything off', b => `curl "${b}/api/set?power=off"`],
+  ['List of saved scenes', b => `curl ${b}/api/scenes`],
+  ['Start a scene by name', b => `curl -G "${b}/api/scene" --data-urlencode "name=Evening"`],
+  ['Board information', b => `curl ${b}/api/system`],
+  ['Reboot the board', b => `curl -X POST ${b}/api/reboot`],
 ];
 
+// The effect names in the help text come from the EFFECTS table
+const boardNames = keys => keys.map(k => EFFECTS[k].board).join(', ');
 const API_PARAMS = [
-  ['power=on|off', 'обе лампы сразу (основной свет и подсветка)'],
-  ['main=dim|restore', 'приглушить основной свет до минимума или вернуть прежнюю яркость'],
-  ['bright=1..100, ct=2700..6500', 'яркость и цветовая температура основного света'],
-  ['bg_power=on|off', 'включить или выключить подсветку; с ним можно сразу задать цвет'],
-  ['hue=0..359, sat=0..100, bg_bright=1..100', 'цвет, насыщенность и яркость подсветки'],
-  ['bg_flow=<эффект>|off', 'on (радуга), warm, cold, neon, pastel, wave, fire, candle, sunset, sunrise, storm, ocean, lava, heart, garland, police'],
-  ['flow_ms', 'время одного шага в миллисекундах; у sunset и sunrise общая длительность'],
-  ['swing=0..90', 'размах яркости у переливаний (on, warm, cold, neon, pastel)'],
-  ['hue, sat вместе с bg_flow', 'цвет для wave и heart'],
-  ['bg_sleep=1..240', 'таймер сна: подсветка плавно гаснет за столько минут; цвет и яркость берутся из hue, sat, bg_bright'],
+  ['power=on|off', 'both lights at once (main light and backlight)'],
+  ['main=dim|restore', 'dim the main light to the minimum or return its previous brightness'],
+  ['bright=1..100, ct=2700..6500', 'main light brightness and color temperature'],
+  ['bg_power=on|off', 'turn the backlight on or off; the color can be set at the same time'],
+  ['hue=0..359, sat=0..100, bg_bright=1..100', 'backlight color, saturation and brightness'],
+  ['bg_flow=<effect>|off', Object.values(EFFECTS).map(e => e.board === 'on' ? 'on (rainbow)' : e.board).join(', ')],
+  ['flow_ms', 'time of one step in milliseconds; for ' + boardNames(TIMED_EFFECTS) + ' the total duration'],
+  ['swing=0..90', 'brightness swing of color cycling (' + boardNames(PALETTE_EFFECTS) + ')'],
+  ['hue, sat together with bg_flow', 'the color for ' + boardNames(COLOR_EFFECTS)],
+  ['bg_sleep=1..240', 'sleep timer: the backlight fades out over this many minutes; the color and brightness come from hue, sat, bg_bright'],
 ];
 
-// Копирование: на странице по http (не https) navigator.clipboard недоступен, поэтому запасной способ
+// Copying: on a page over http (not https) navigator.clipboard is unavailable, so there is a fallback
 function copyText(text, btn) {
   const done = () => {
     const old = btn.textContent;
-    btn.textContent = 'Скопировано';
+    btn.textContent = 'Copied';
     setTimeout(() => { btn.textContent = old; }, 1200);
   };
   const fallback = () => {
@@ -805,7 +822,7 @@ function renderApi() {
     code.textContent = cmd;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = 'Копировать';
+    btn.textContent = 'Copy';
     btn.addEventListener('click', () => copyText(cmd, btn));
     row.append(code, btn);
     wrap.append(t, row);
@@ -814,18 +831,18 @@ function renderApi() {
   const params = $('api_params');
   params.textContent = '';
   const head = document.createElement('div');
-  head.textContent = 'Параметры /api/set (их можно объединять через &):';
+  head.textContent = '/api/set parameters (they can be combined with &):';
   params.append(head);
   API_PARAMS.forEach(([name, text]) => {
     const line = document.createElement('div');
     const b = document.createElement('b');
     b.textContent = name;
-    line.append(b, ' — ' + text);
+    line.append(b, ' - ' + text);
     params.append(line);
   });
 }
 
-// Команда, которая повторяет текущие настройки подсветки на странице
+// A command that repeats the current backlight settings from the page
 function renderApiNow() {
   if (!$('sec_api').open) return;
   const q = flowOn()
@@ -838,7 +855,7 @@ $('api_now_copy').addEventListener('click', () => copyText($('api_now').textCont
 
 // ---------- System ----------
 
-const kb = n => (n / 1024).toFixed(0) + ' КБ';
+const kb = n => (n / 1024).toFixed(0) + ' KB';
 
 function setBar(id, pct) {
   const el = $(id);
@@ -848,33 +865,33 @@ function setBar(id, pct) {
 
 function fmtUptime(sec) {
   const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
-  if (d) return d + ' д ' + h + ' ч';
-  if (h) return h + ' ч ' + m + ' мин';
-  return m + ' мин ' + (sec % 60) + ' с';
+  if (d) return d + ' d ' + h + ' h';
+  if (h) return h + ' h ' + m + ' min';
+  return m + ' min ' + (sec % 60) + ' s';
 }
 
 function wifiQuality(rssi) {
-  if (rssi >= -55) return 'отличный';
-  if (rssi >= -67) return 'хороший';
-  if (rssi >= -75) return 'средний';
-  return 'слабый';
+  if (rssi >= -55) return 'excellent';
+  if (rssi >= -67) return 'good';
+  if (rssi >= -75) return 'fair';
+  return 'weak';
 }
 
 let sysBusy = false;
 
 function loadSystem() {
-  if (sysBusy || !$('sec_sys').open) return;  // свёрнутый блок не опрашиваем
+  if (sysBusy || !$('sec_sys').open) return;  // a collapsed block is not polled
   sysBusy = true;
   fetchJson('/api/system', 8000)
     .then(j => {
-      $('sys_chip').textContent = j.chip + ', ' + j.cores + ' яд., ' + j.cpu_mhz + ' МГц';
+      $('sys_chip').textContent = j.chip + ', ' + j.cores + (j.cores === 1 ? ' core, ' : ' cores, ') + j.cpu_mhz + ' MHz';
       $('sys_uptime').textContent = fmtUptime(j.uptime);
       const used = j.heap_total - j.heap_free;
-      $('sys_heap').textContent = 'занято ' + kb(used) + ' из ' + kb(j.heap_total);
+      $('sys_heap').textContent = 'used ' + kb(used) + ' of ' + kb(j.heap_total);
       setBar('sys_heap_bar', used / j.heap_total * 100);
       $('sys_heap_min').textContent = kb(j.heap_min);
       if (j.sketch_free > 0) {
-        $('sys_sketch').textContent = kb(j.sketch) + ' из ' + kb(j.sketch_free);
+        $('sys_sketch').textContent = kb(j.sketch) + ' of ' + kb(j.sketch_free);
         setBar('sys_sketch_bar', j.sketch / j.sketch_free * 100);
       } else {
         $('sys_sketch').textContent = kb(j.sketch);
@@ -882,31 +899,31 @@ function loadSystem() {
       }
       $('sys_busy').textContent = j.busy + '%';
       setBar('sys_busy_bar', j.busy);
-      $('sys_temp').textContent = j.temp === null ? 'нет данных' : j.temp.toFixed(1) + ' °C';
-      $('sys_wifi').textContent = j.ssid + ', ' + j.rssi + ' дБм (' + wifiQuality(j.rssi) + ')';
+      $('sys_temp').textContent = j.temp === null ? 'n/a' : j.temp.toFixed(1) + ' °C';
+      $('sys_wifi').textContent = j.ssid + ', ' + j.rssi + ' dBm (' + wifiQuality(j.rssi) + ')';
       $('sys_ip').textContent = j.ip;
       $('sys_mac').textContent = j.mac;
       $('sys_note').textContent = '';
     })
-    .catch(() => { $('sys_note').textContent = 'плата не ответила, пробую снова'; })
+    .catch(() => { $('sys_note').textContent = 'the board did not respond, trying again'; })
     .finally(() => { sysBusy = false; });
 }
 
 $('reboot').addEventListener('click', () => {
-  if (!confirm('Перезагрузить плату? Страница будет недоступна около 10 секунд.')) return;
+  if (!confirm('Reboot the board? The page will be unavailable for about 10 seconds.')) return;
   fetch('/api/reboot', { method: 'POST' }).catch(() => {});
-  $('sys_note').textContent = 'плата перезагружается…';
+  $('sys_note').textContent = 'the board is rebooting…';
   setTimeout(() => location.reload(), 10000);
 });
 
-// ---------- Таймер сна ----------
+// ---------- Sleep timer ----------
 
-let sleepEnd = 0;  // когда подсветка погаснет (по часам страницы), 0 — таймер не идёт
+let sleepEnd = 0;  // when the backlight goes out (by the page clock), 0 - no timer is running
 
 function renderSleep() {
   const left = sleepEnd ? Math.round((sleepEnd - Date.now()) / 1000) : 0;
   if (left <= 0) {
-    if (sleepEnd) {  // время вышло: через пару секунд сверяем переключатели с лампой
+    if (sleepEnd) {  // time is up: in a couple of seconds check the switches against the lamp
       sleepEnd = 0;
       setTimeout(() => refresh(true), 2500);
     }
@@ -914,7 +931,7 @@ function renderSleep() {
     return;
   }
   const m = Math.floor(left / 60), s = left % 60;
-  $('sleep_note').textContent = 'гаснет через ' + (m ? m + ' мин ' : '') + s + ' с';
+  $('sleep_note').textContent = 'turns off in ' + (m ? m + ' min ' : '') + s + ' s';
 }
 setInterval(renderSleep, 1000);
 
@@ -930,25 +947,25 @@ $('sleep_go').addEventListener('click', () => {
   renderSleep();
 });
 
-// Отмена возвращает подсветку на цвет и яркость с ползунков
+// Cancel returns the backlight to the color and brightness from the sliders
 $('sleep_stop').addEventListener('click', () => {
   if (!sleepEnd) return;
   queue({ bg_flow: 'off', hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value }, true);
   renderSleep();
 });
 
-// ---------- Сцены ----------
+// ---------- Scenes ----------
 
 const SCENE_MAX = 8;
 let scenes = [];
 
 function sceneNote(text) { $('scene_note').textContent = text || ''; }
 
-// Данные с платы проверяем и приводим к допустимым значениям: страница не должна ломаться от кривой записи
+// Data from the board is checked and brought to valid values: the page must not break on a malformed record
 function cleanScene(x) {
   if (!x || typeof x.n !== 'string') return null;
   const num = (v, lo, hi, d) => { v = +v; return isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
-  const known = x.e === 'off' || Object.prototype.hasOwnProperty.call(EFFECT_TO_BOARD, x.e);
+  const known = x.e === 'off' || Object.prototype.hasOwnProperty.call(EFFECTS, x.e);
   return { n: x.n.slice(0, 20), e: known ? x.e : 'off', h: num(x.h, 0, 359, 0), s: num(x.s, 0, 100, 100),
            b: num(x.b, 1, 100, 100), fs: num(x.fs, 1, 20, 3), fm: num(x.fm, 1, 30, 10), w: num(x.w, 0, 90, 0) };
 }
@@ -968,28 +985,28 @@ function renderScenes() {
     del.type = 'button';
     del.className = 'del';
     del.textContent = '✕';
-    del.title = 'Удалить';
+    del.title = 'Delete';
     del.addEventListener('click', () => { scenes.splice(i, 1); renderScenes(); saveScenes(); });
     row.append(go, del);
     box.append(row);
   });
-  sceneNote(scenes.length ? '' : 'Сохранённых сцен пока нет');
+  sceneNote(scenes.length ? '' : 'No saved scenes yet');
 }
 
 function saveScenes() {
   return fetch('/api/scenes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scenes) })
     .then(r => r.json())
     .then(j => { if (!j.ok) throw new Error('save'); })
-    .catch(() => sceneNote('не удалось сохранить сцены на плате'));
+    .catch(() => sceneNote('could not save the scenes on the board'));
 }
 
 function loadScenes() {
   fetchJson('/api/scenes', 8000)
     .then(a => { scenes = (Array.isArray(a) ? a : []).map(cleanScene).filter(Boolean).slice(0, SCENE_MAX); renderScenes(); })
-    .catch(() => { sceneNote('не удалось прочитать сцены, пробую снова'); setTimeout(loadScenes, 5000); });
+    .catch(() => { sceneNote('could not read the scenes, trying again'); setTimeout(loadScenes, 5000); });
 }
 
-// Включить сцену: цвет, яркость, эффект и скорость ставятся одной командой
+// Start a scene: color, brightness, effect and speed are set with one command
 function applyScene(sc) {
   $('hue').value = sc.h;
   $('sat').value = sc.s;
@@ -997,7 +1014,7 @@ function applyScene(sc) {
   $('swing').value = sc.w;
   flowSec = sc.fs;
   flowMin = sc.fm;
-  setEffect(sc.e);  // заодно ставит ползунок времени
+  setEffect(sc.e);  // this also sets the time slider
   ['hue', 'sat', 'bg_bright', 'swing'].forEach(updateLabel);
   updateSwatch();
   setOn('bg_power', true);
@@ -1006,12 +1023,12 @@ function applyScene(sc) {
 
 $('scene_save').addEventListener('click', () => {
   const name = $('scene_name').value.trim().slice(0, 20);
-  if (!name) { sceneNote('введите название сцены'); return; }
+  if (!name) { sceneNote('enter a scene name'); return; }
   const sc = { n: name, e: effect(), h: +$('hue').value, s: +$('sat').value, b: +$('bg_bright').value,
                fs: flowSec, fm: flowMin, w: +$('swing').value };
   const i = scenes.findIndex(x => x.n === name);
-  if (i >= 0) scenes[i] = sc;  // то же название: заменяем
-  else if (scenes.length >= SCENE_MAX) { sceneNote('можно хранить до ' + SCENE_MAX + ' сцен, удалите ненужную'); return; }
+  if (i >= 0) scenes[i] = sc;  // the same name: replace
+  else if (scenes.length >= SCENE_MAX) { sceneNote('up to ' + SCENE_MAX + ' scenes can be stored, delete one you do not need'); return; }
   else scenes.push(sc);
   $('scene_name').value = '';
   renderScenes();
@@ -1023,9 +1040,9 @@ loadScenes();
 renderApi();
 renderApiNow();
 refresh();
-setInterval(() => { if (!stateLoaded) refresh(); }, 3000);  // пока лампа не ответила, пробуем снова
+setInterval(() => { if (!stateLoaded) refresh(); }, 3000);  // until the lamp has replied, keep trying
 setInterval(refresh, 15000);
-setTimeout(loadSystem, 3000);  // даём состоянию лампы прочитаться первым
+setTimeout(loadSystem, 3000);  // let the lamp state be read first
 setInterval(loadSystem, 5000);
 </script>
 </body>
