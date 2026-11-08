@@ -6,13 +6,13 @@ The project exists because the original remote was lost. The Yeelight cloud is n
 
 ## Features
 
-- **Main light:** brightness, color temperature, dimming to the minimum and returning to the previous brightness. The "Turn everything off" button turns both lights off.
-- **Backlight:** color, saturation, brightness and "Lock color" (stops an effect on the current color).
+- **Main light:** brightness, color temperature, on and off. Turning it off keeps the backlight lit (the page sets the backlight again right after the lamp turns both lights off).
+- **Backlight:** color, saturation, a "White" button in the Effect block and "Lock color" (stops an effect on the current color). The backlight brightness is always 100%.
 - **Effects:** Wave, Campfire, Candle, Sunset, Sunrise, Storm, Ocean, Lava, Heartbeat, Garland, Police.
 - **Color cycling:** Rainbow, Warm, Cold, Neon, Pastel, with a "Brightness swing" slider.
 - **Sleep timer:** the backlight fades out over the chosen time (up to 120 minutes on the page, up to 240 through the API).
-- **Scenes:** a built-in "White" button and up to 8 saved backlight settings, stored in the board's memory and kept across reboots.
-- **System block:** chip, memory, server load, temperature, Wi-Fi, IP, board reboot.
+- **Scenes:** up to 8 saved backlight settings, stored in the board's memory and kept across reboots.
+- **System block:** firmware version and build date, chip, memory, server load, temperature, Wi-Fi, IP, board reboot. The version is also shown next to the page title.
 - **Terminal API block:** ready-made `curl` commands with a copy button.
 
 The effects run on the lamp itself; the board only starts them. At any moment the whole backlight shows one color: the lamp cannot show different colors along its length.
@@ -77,7 +77,7 @@ Parameters can be combined with `&`.
 | `main` | `dim`, `restore`: dim the main light to 1% or return its brightness (`main_save` remembers the current one) |
 | `bright`, `ct` | main light brightness 1-100, temperature 2700-6500 K |
 | `bg_power` | `on`, `off`: the backlight |
-| `hue`, `sat`, `bg_bright` | color 0-359, saturation 0-100, backlight brightness 1-100 |
+| `hue`, `sat`, `bg_bright` | color 0-359, saturation 0-100, backlight brightness 1-100 (the page always sends 100) |
 | `bg_flow` | `on` (rainbow), `warm`, `cold`, `neon`, `pastel`, `wave`, `fire`, `candle`, `sunset`, `sunrise`, `storm`, `ocean`, `lava`, `heart`, `garland`, `police`, `off` |
 | `flow_ms` | time of one step in milliseconds; for `sunset` and `sunrise` the total duration |
 | `swing` | brightness swing of color cycling, 0-90 |
@@ -93,7 +93,7 @@ Parameters can be combined with `&`.
 | `GET /api/state` | lamp state and the last effect that was started |
 | `GET /api/scene?name=...` | start a saved scene (404 if there is none; names with quotes and slashes are not found) |
 | `GET`, `POST /api/scenes` | read or write the whole list of scenes |
-| `GET /api/system` | board information |
+| `GET /api/system` | board information, including the firmware version and build date |
 | `POST /api/reboot` | reboot the board |
 
 ## Lamp quirks
@@ -102,7 +102,7 @@ The remote is built the way it is because of these:
 
 - The lamp accepts about 60 commands per minute, otherwise it goes silent. The board keeps at least a second between commands, and the page sends slider commands no more than once per 1.2 s.
 - The `bg_set_power on` command replies "ok" but does not turn the backlight on. So the backlight is turned on with a `bg_set_scene` scene; then the board checks `bg_power` and, if needed, switches it with `bg_toggle`.
-- There is no command to turn off only the main light: `set_power` and `toggle` act on both lights. So the main light is dimmed to 1% instead of being turned off.
+- There is no command to turn off only the main light: `set_power` and `toggle` act on both lights. So the page turns both lights off and, in the same request, sets the backlight again. The backlight blinks for a moment, a running effect starts over and a sleep timer is restarted with the time left. The API still has `main=dim`, which dims the main light to 1%.
 - The `power` property means "the main light or the backlight is on". The state of the main light is reported by `main_power`.
 
 ## Tests
@@ -157,10 +157,13 @@ The workflow `.github/workflows/ci.yml` runs on every push and pull request:
 2. In `src/index_html.h` add a row to the `EFFECTS` table. The button appears by itself. If you want, add the button strip animation in CSS.
 3. Run `python3 tests/check_static.py`: it checks that the lists match.
 
+## Firmware version
+
+The version is the `FW_VERSION` define at the top of `src/main.cpp` (format `x.y.z`). Change it with every release: it is shown on the page next to the title and in the System block, together with the build date. You can also pass it from the build: `-DFW_VERSION=\"1.2.0\"` in `build_flags`.
+
 ## Known limitations
 
 - There is no password on the page or the API.
 - After the board reboots, a running effect is shown on the page as "Rainbow": the lamp does not say which effect is running.
 - Sunset turns the backlight off at the end, sunrise stays on the last color. The sleep timer fades in the color set on the sliders.
 - Not verified on a real lamp: long effect chains (campfire, storm, garland, police, lava, ocean), long sunset and sunrise durations (up to 30 minutes), the sleep timer up to 120 minutes, the `/api/scene` reply, and the `bg_flowing`, `bg_rgb` and `main_power` properties in `get_prop`. If the lamp replies with anything other than "ok", send the lines from the serial monitor: the command (`->`) and the reply (`<-`).
-- 

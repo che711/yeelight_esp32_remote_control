@@ -52,6 +52,12 @@ for name in re.findall(r'^\s*\{"(\w+)",\s+(FLOW_\w+),', main_cpp, re.M):
     if not re.search(r"const FlowStep %s\[\]" % name[1], main_cpp):
         fail("the steps array %s was not found for the effect %s" % (name[1], name[0]))
 
+# 5. The firmware has a version in the form x.y.z (it is shown on the page next to the title)
+if not re.search(r'#define FW_VERSION "\d+\.\d+\.\d+"', main_cpp):
+    fail('main.cpp must define FW_VERSION as "x.y.z"')
+if "\"fw\"" not in page_h or "showVersion" not in page_h:
+    fail("the page does not show the firmware version")
+
 if errors:
     sys.exit(1)
 print("ok: %d effects, the page and its script are fine" % len(page))
