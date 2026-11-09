@@ -116,6 +116,14 @@ def test_page_and_effect_table_match_firmware(lamp):
     assert lamp.methods() == []  # the page does not touch the lamp
 
 
+def test_system_reports_version(lamp):
+    status, j = api("/api/system")
+    assert status == 200
+    assert re.fullmatch(r"\d+\.\d+\.\d+", j["version"]), j["version"]
+    assert j["build"]
+    assert lamp.methods() == []  # board information does not touch the lamp
+
+
 def test_state(lamp):
     status, j = api("/api/state")
     assert status == 200 and j["ok"] is True
@@ -149,6 +157,30 @@ def test_all_off(lamp):
     assert set_ok({"power": "off"})["ok"]
     assert lamp.methods() == ["set_power"]
     assert lamp.commands[0].params[0] == "off"
+
+
+def test_main_off_brings_backlight_back(lamp):
+    """What the page sends to turn off only the main light while the backlight is on a plain color."""
+    assert set_ok({"power": "off", "bg_power": "on", "hue": 10, "sat": 100, "bg_bright": 50})["ok"]
+    assert lamp.methods() == ["set_power", "bg_set_scene", "get_prop"]
+    assert lamp.state["main_power"] == "off"
+    assert lamp.state["bg_power"] == "on"
+
+
+def test_main_off_brings_effect_back(lamp):
+    """The same while an effect is running: the effect starts again in the same request."""
+    assert set_ok({"power": "off", "bg_flow": "neon", "flow_ms": 3000, "bg_bright": 80, "swing": 0})["ok"]
+    assert lamp.methods() == ["set_power", "bg_set_scene"]
+    assert lamp.commands[1].params[0] == "cf"
+    assert lamp.state["main_power"] == "off"
+    assert lamp.state["bg_power"] == "on"
+
+
+def test_main_off_restarts_sleep_timer(lamp):
+    assert set_ok({"power": "off", "bg_sleep": 12, "hue": 30, "sat": 80, "bg_bright": 60})["ok"]
+    assert lamp.methods() == ["set_power", "bg_set_scene"]
+    assert chain(lamp.commands[1])[1][0] == 12 * 60000
+    assert lamp.state["main_power"] == "off"
 
 
 # ---------- backlight ----------
@@ -247,17 +279,17 @@ def test_sleep_timer(lamp):
 # ---------- scenes ----------
 
 def test_scene_with_effect(lamp, scenes_backup):
-    save_scenes([{"n": "Test", "e": "neon", "h": 0, "s": 100, "b": 70, "fs": 4, "fm": 10, "w": 30}])
+    save_scenes([{"n": "Test", "e": "neon", "h": 0, "s": 100, "b": 100, "fs": 4, "fm": 10, "w": 30}])
     lamp.clear()
     status, j = api("/api/scene", {"name": "Test"})
     assert status == 200 and j["ok"]
     steps = chain(lamp.commands[0])
     assert all(d == 4000 for d, _, _ in steps)
-    assert [b for _, _, b in steps] == [70, 49, 70, 49, 70, 49]  # swing 30%
+    assert [b for _, _, b in steps] == [100, 70, 100, 70, 100, 70]  # swing 30%
 
 
 def test_scene_timed_effect_uses_minutes(lamp, scenes_backup):
-    save_scenes([{"n": "Sunset15", "e": "sunset", "h": 0, "s": 100, "b": 70, "fs": 3, "fm": 15, "w": 0}])
+    save_scenes([{"n": "Sunset15", "e": "sunset", "h": 0, "s": 100, "b": 100, "fs": 3, "fm": 15, "w": 0}])
     lamp.clear()
     status, j = api("/api/scene", {"name": "Sunset15"})
     assert status == 200 and j["ok"]
@@ -269,7 +301,8 @@ def test_scene_plain_color(lamp, scenes_backup):
     lamp.clear()
     status, j = api("/api/scene", {"name": "Blue"})
     assert status == 200 and j["ok"]
-    assert lamp.commands[0].params == ["hsv", 220, 90, 55]
+    # the backlight brightness is always 100%: the 55 stored in an old scene is ignored
+    assert lamp.commands[0].params == ["hsv", 220, 90, 100]
 
 
 def test_scene_not_found(lamp):

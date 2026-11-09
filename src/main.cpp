@@ -6,6 +6,12 @@
 #include "config.h"
 #include "index_html.h"
 
+// Firmware version, shown on the page next to the title. Change it with every release
+// (or pass -DFW_VERSION=\"x.y.z\" in build_flags).
+#ifndef FW_VERSION
+#define FW_VERSION "1.1.0"
+#endif
+
 WebServer server(80);
 Preferences prefs;  // board memory that survives reboots: scenes are stored here
 uint32_t cmdId = 1;
@@ -173,7 +179,9 @@ String jsonEscape(const String &in) {
 void handleSystem() {
   float temp = temperatureRead();
   String j = "{";
-  j += "\"chip\":\"" + jsonEscape(ESP.getChipModel()) + "\"";
+  j += "\"version\":\"" FW_VERSION "\"";
+  j += ",\"build\":\"" __DATE__ " " __TIME__ "\"";
+  j += ",\"chip\":\"" + jsonEscape(ESP.getChipModel()) + "\"";
   j += ",\"cores\":" + String(ESP.getChipCores());
   j += ",\"cpu_mhz\":" + String(ESP.getCpuFreqMHz());
   j += ",\"heap_total\":" + String(ESP.getHeapSize());
@@ -359,8 +367,9 @@ bool applySet() {
   if (hasA("power")) {
     run("set_power", String("[\"") + (getA("power") == "on" ? "on" : "off") + "\",\"smooth\",300]");
   }
-  // The main light is never turned off: the lamp turns both lights off at once. Instead we dim it to the minimum
-  // (main=dim) and later return the previous brightness (main=restore).
+  // The lamp turns both lights off at once (power=off). To turn off only the main light the page sends
+  // power=off together with the backlight parameters: the commands run in this order, so the backlight is
+  // set again right after. main=dim dims the main light to the minimum, main=restore returns the brightness.
   if (hasA("main")) {
     if (getA("main") == "dim") {
       int saved = getA("main_save").toInt();
@@ -545,7 +554,7 @@ void handleScene() {
   String e = sceneStr(obj, "e");
   int hue = constrain(sceneNum(obj, "h", 0), 0, 359);
   int sat = constrain(sceneNum(obj, "s", 100), 0, 100);
-  int br = constrain(sceneNum(obj, "b", 100), 1, 100);
+  int br = 100;  // the backlight brightness is always 100%; old scenes may still store another value, it is ignored
   long fs = constrain(sceneNum(obj, "fs", 3), 1, 20);
   long fm = constrain(sceneNum(obj, "fm", 10), 1, 30);
   int w = constrain(sceneNum(obj, "w", 0), 0, 90);

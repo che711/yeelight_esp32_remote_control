@@ -21,6 +21,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
          background:radial-gradient(80% 52% at 50% -8%, color-mix(in srgb, var(--glow) 46%, transparent), transparent 72%) no-repeat fixed, var(--bg); }
   main { max-width:480px; margin:0 auto; }
   h1 { font-size:28px; font-weight:800; letter-spacing:-.02em; margin:2px 0 8px; }
+  #fw { font-size:13px; font-weight:400; letter-spacing:0; color:var(--dim); white-space:nowrap; }
   #strip { height:6px; border-radius:3px; background:var(--glow-grad); box-shadow:0 0 26px 2px var(--glow); margin:0 0 10px; }
   #status { font-size:13px; color:var(--dim); margin-bottom:16px; }
   #status.bad { color:#ff7a8a; }
@@ -49,7 +50,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   input[type=range]:focus-visible { outline:2px solid #fff; outline-offset:3px; }
   #bright    { --track:linear-gradient(90deg,#2b2a3d,#fff1c9); }
   #ct        { --track:linear-gradient(90deg,#ff9a3c,#fff2e0,#9ecbff); }
-  #bg_bright { --track:linear-gradient(90deg,#1c1f3f,var(--glow)); }
   #sat       { --track:linear-gradient(90deg,#fff,var(--hue-solid)); }
   #hue       { --track:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00); }
   #flow_s    { --track:linear-gradient(90deg,#3de0c8,#ffd166); }
@@ -63,7 +63,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   #bg_power.on { background:linear-gradient(135deg, color-mix(in srgb, var(--glow) 70%, #fff), var(--glow));
                  color:#0b0c1e; box-shadow:0 0 28px -4px var(--glow); }
   .pwr.dim { background:rgba(255,176,46,.14); border-color:var(--accent); color:var(--accent); }
-  .pwr.soft { padding:9px; font-weight:400; font-size:14px; margin-top:0; }
   .pwr:disabled { opacity:.45; cursor:default; }
 
   .seg { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 8px; }
@@ -76,6 +75,8 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
         background-image:var(--sw); background-size:250% 100%; background-repeat:no-repeat;
         animation:drift 8s ease-in-out infinite alternate; }
   .seg button[data-v="off"]::after { content:none; }
+  #white::after { content:''; position:absolute; z-index:-1; left:0; right:0; bottom:0; height:4px;
+        background:linear-gradient(90deg,#fff,#d8ecff,#fff); }
   .seg button[data-v="rainbow"]::after { animation-duration:7s; }
   .seg button[data-v="ocean"]::after { animation-duration:10s; }
   .seg button[data-v="fire"]::after { animation:drift 1.6s ease-in-out infinite alternate, flicker-fire .9s linear infinite; }
@@ -154,14 +155,13 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 </head>
 <body>
 <main>
-  <h1>Yeelight Screen Light Bar Pro (YLTD003)</h1>
+  <h1>Yeelight Screen Light Bar Pro (YLTD003) <span id="fw"></span></h1>
   <div id="strip"></div>
   <div id="status">reading the lamp state…</div>
 
   <details class="card" id="sec_main" style="--tone:#ffd166" open>
     <summary>Main light</summary>
     <button type="button" id="power" class="pwr" data-on="0" disabled>Main light…</button>
-    <button type="button" id="all_off" class="pwr soft" disabled>Turn everything off (main light and backlight)</button>
     <div class="row"><span>Brightness</span><b id="bright_v"></b></div>
     <input type="range" id="bright" min="1" max="100" autocomplete="off">
     <div class="row"><span>Color temperature</span><b id="ct_v"></b></div>
@@ -171,13 +171,12 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
   <details class="card" id="sec_bg" style="--tone:var(--glow)" open>
     <summary>Backlight</summary>
     <button type="button" id="bg_power" class="pwr" data-on="0" disabled>Backlight…</button>
-    <div class="row"><span>Brightness</span><b id="bg_bright_v"></b></div>
-    <input type="range" id="bg_bright" min="1" max="100" autocomplete="off">
     <div class="row"><span>Effect</span></div>
     <div id="bg_effect">
     <!-- The effect and color-cycling buttons are built from the EFFECTS table in the script -->
     <div class="seg" id="seg_fx">
       <button type="button" data-v="off" class="on">None</button>
+      <button type="button" id="white">White</button>
     </div>
     <div class="row"><span>Color cycling</span></div>
     <div class="seg" id="seg_pal"></div>
@@ -203,7 +202,6 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
   <details class="card" id="sec_scenes" style="--tone:#9b8cff" open>
     <summary>Backlight scenes</summary>
-    <div class="scene"><button type="button" id="white" class="go">White</button></div>
     <div id="scene_list"></div>
     <div id="scene_row">
       <input type="text" id="scene_name" maxlength="20" placeholder="Scene name" autocomplete="off">
@@ -225,12 +223,13 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
   <details class="card" id="sec_sys" style="--tone:#3de0c8" open>
     <summary>System</summary>
+    <div class="kv"><span>Firmware version</span><span id="sys_version">—</span></div>
     <div class="kv"><span>Board</span><span id="sys_chip">—</span></div>
     <div class="kv"><span>Uptime</span><span id="sys_uptime">—</span></div>
     <div class="kv"><span>Memory (heap)</span><span id="sys_heap">—</span></div>
     <div class="bar"><i id="sys_heap_bar"></i></div>
     <div class="kv"><span>Minimum free memory</span><span id="sys_heap_min">—</span></div>
-    <div class="kv"><span>Firmware</span><span id="sys_sketch">—</span></div>
+    <div class="kv"><span>Firmware size</span><span id="sys_sketch">—</span></div>
     <div class="bar"><i id="sys_sketch_bar"></i></div>
     <div class="kv"><span>Server load</span><span id="sys_busy">—</span></div>
     <div class="bar"><i id="sys_busy_bar"></i></div>
@@ -245,7 +244,9 @@ const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 
 <script>
 const $ = id => document.getElementById(id);
-const suffix = { bright:'%', ct:' K', bg_bright:'%', hue:'°', sat:'%', flow_s:' s', swing:'%', sleep_m:' min' };
+// The backlight brightness is always 100%: there is no brightness slider for the backlight
+const BG_BRIGHT = 100;
+const suffix = { bright:'%', ct:' K', hue:'°', sat:'%', flow_s:' s', swing:'%', sleep_m:' min' };
 
 // All backlight effects in one table; the row order is the button order.
 // A new effect: a row here + a row in FLOW_DEFS in main.cpp (the animation of the button strip can be added in CSS).
@@ -337,10 +338,10 @@ function setOn(id, on) {
   updateGlow();
 }
 
-// The main light is never turned off: the lamp turns both lights off at once, so it has three states:
-// on - lit, dim - dimmed to the minimum brightness (the backlight does not blink), off - the whole lamp is off
+// The main light has three states: on - lit, dim - lit at the minimum brightness (the slider is at 1%),
+// off - turned off. The button toggles between lit (on or dim) and off.
 let mainMode = 'off';
-let mainSaved = 70;  // brightness before dimming
+let mainSaved = 70;  // brightness before turning off
 const MAIN_LABELS = { on: 'Main light: on', dim: 'Main light: dimmed', off: 'Main light: off' };
 
 function setMain(mode) {
@@ -402,7 +403,7 @@ function applyFlowSlider() {
 // All effects need the speed and brightness; wave and heartbeat also need the color.
 function flowParams() {
   const p = { bg_flow: EFFECT_TO_BOARD[effect()], flow_ms: $('flow_s').value * (isTimed() ? 60000 : 1000),
-              bg_bright: $('bg_bright').value };
+              bg_bright: BG_BRIGHT };
   if (usesColor()) { p.hue = $('hue').value; p.sat = $('sat').value; }
   if (isPalette()) p.swing = $('swing').value;
   return p;
@@ -562,12 +563,6 @@ $('swing').addEventListener('input', () => {
   if (isPalette()) queue(flowParams());
 });
 
-// While an effect is on, we change the brightness by restarting it with the new brightness
-$('bg_bright').addEventListener('input', () => {
-  updateLabel('bg_bright');
-  queue(flowOn() ? flowParams() : { bg_bright: $('bg_bright').value });
-});
-
 // Stop the effect on the color that is lit now. The button stays in place and always works
 $('bg_lock').addEventListener('click', () => {
   if (flowOn()) {
@@ -591,7 +586,7 @@ $('flow_s').addEventListener('input', () => {
 function leaveRainbow() {
   if (effect() === 'off' || usesColor()) return {};
   setEffect('off');
-  return { bg_flow: 'off', bg_bright: $('bg_bright').value };
+  return { bg_flow: 'off', bg_bright: BG_BRIGHT };
 }
 
 ['hue', 'sat'].forEach(id => {
@@ -615,41 +610,36 @@ $('white').addEventListener('click', () => {
   queue(usesColor() ? flowParams() : Object.assign({ hue: $('hue').value, sat: 0 }, stop), true);
 });
 
+// The lamp has no command to turn off only the main light: it turns both lights off at once.
+// So to turn off the main light we turn everything off and, in the same request, set the backlight again.
+// The backlight blinks for a moment; a running effect starts over, a sleep timer is restarted with the time left.
+function backlightParams() {
+  if (!isOn('bg_power')) return {};
+  const color = { hue: $('hue').value, sat: $('sat').value, bg_bright: BG_BRIGHT };
+  const left = sleepEnd ? Math.round((sleepEnd - Date.now()) / 1000) : 0;
+  if (left > 0) return Object.assign({ bg_sleep: Math.max(1, Math.ceil(left / 60)) }, color);
+  return flowOn() ? flowParams() : Object.assign({ bg_power: 'on' }, color);
+}
+
 $('power').addEventListener('click', () => {
   syncAfterSend = 'state';  // in a second we check the buttons against the lamp
-  if (mainMode === 'on') {
-    // Dim to the minimum, leave the backlight alone
+  if (mainMode !== 'off') {
+    // Turn the main light off; the backlight is brought back by the same request
     const cur = +$('bright').value;
     if (cur > 1) mainSaved = cur;
-    $('bright').value = 1;
-    updateLabel('bright');
-    setMain('dim');
-    queue({ main: 'dim', main_save: mainSaved }, true);
+    setMain('off');
+    const params = Object.assign({ power: 'off' }, backlightParams());
+    queue(params, true);
+    if (params.bg_sleep) sleepEnd = Date.now() + params.bg_sleep * 60000;  // the timer was restarted
   } else {
-    // Return the previous brightness; if the whole lamp was off, turn it on first
-    const wasOff = mainMode === 'off';
+    // Turn the lamp on and return the previous brightness
     $('bright').value = mainSaved;
     updateLabel('bright');
     setMain('on');
-    const params = { main: 'restore' };
-    if (wasOff) {
-      params.power = 'on';
-      if (!isOn('bg_power')) params.bg_power = 'off';  // the lamp turns both lights on, but the backlight was off
-    }
+    const params = { main: 'restore', power: 'on' };
+    if (!isOn('bg_power')) params.bg_power = 'off';  // the lamp turns both lights on, but the backlight was off
     queue(params, true);
   }
-});
-
-// Turns both lights off at once: the backlight goes out too, effects and the sleep timer are reset
-$('all_off').addEventListener('click', () => {
-  setMain('off');
-  setOn('bg_power', false);
-  setEffect('off');
-  updateSwatch();
-  sleepEnd = 0;
-  renderSleep();
-  syncAfterSend = 'state';
-  queue({ power: 'off' }, true);
 });
 
 $('bg_power').addEventListener('click', () => {
@@ -664,7 +654,7 @@ $('bg_power').addEventListener('click', () => {
     queue(flowParams(), true);
   } else {
     // When turning the backlight on, set the color at once: it lights up in color instead of the lamp's "last" mode
-    queue({ bg_power: 'on', hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value }, true);
+    queue({ bg_power: 'on', hue: $('hue').value, sat: $('sat').value, bg_bright: BG_BRIGHT }, true);
   }
 });
 
@@ -689,7 +679,6 @@ function refresh(force, applyColor) {
       if (!stateLoaded) {  // the power buttons wait for the first lamp reply so they do not show an invented state
         stateLoaded = true;
         $('power').disabled = false;
-        $('all_off').disabled = false;
         $('bg_power').disabled = false;
       }
       // The lamp tells whether an effect is running; which one is remembered by the board. If the board rebooted, we assume color cycling
@@ -716,7 +705,7 @@ function refresh(force, applyColor) {
           applyFlowSlider();
         }
       }
-      ['bright', 'ct', 'bg_bright', 'hue', 'sat'].forEach(id => {
+      ['bright', 'ct', 'hue', 'sat'].forEach(id => {
         // During an effect the lamp color keeps changing, so the color sliders are left alone
         const skip = flowing && (id === 'hue' || id === 'sat');
         if (!skip && j[id] !== undefined) $(id).value = j[id];
@@ -844,7 +833,7 @@ function renderApiNow() {
   if (!$('sec_api').open) return;
   const q = flowOn()
     ? new URLSearchParams(flowParams())
-    : new URLSearchParams({ bg_power: 'on', hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value });
+    : new URLSearchParams({ bg_power: 'on', hue: $('hue').value, sat: $('sat').value, bg_bright: BG_BRIGHT });
   $('api_now').textContent = 'curl "' + location.origin + '/api/set?' + q.toString() + '"';
 }
 
@@ -876,11 +865,24 @@ function wifiQuality(rssi) {
 
 let sysBusy = false;
 
+// The firmware version is shown next to the title and in the System block
+function showVersion(j) {
+  if (!j.version) return;
+  $('fw').textContent = 'v' + j.version;
+  $('sys_version').textContent = j.version + (j.build ? ' (built ' + j.build + ')' : '');
+}
+
+// The version is read once at start, it does not touch the lamp
+function loadVersion() {
+  fetchJson('/api/system', 8000).then(showVersion).catch(() => setTimeout(loadVersion, 5000));
+}
+
 function loadSystem() {
   if (sysBusy || !$('sec_sys').open) return;  // a collapsed block is not polled
   sysBusy = true;
   fetchJson('/api/system', 8000)
     .then(j => {
+      showVersion(j);
       $('sys_chip').textContent = j.chip + ', ' + j.cores + (j.cores === 1 ? ' core, ' : ' cores, ') + j.cpu_mhz + ' MHz';
       $('sys_uptime').textContent = fmtUptime(j.uptime);
       const used = j.heap_total - j.heap_free;
@@ -939,7 +941,7 @@ $('sleep_go').addEventListener('click', () => {
   setEffect('off');
   updateSwatch();
   setOn('bg_power', true);
-  queue({ bg_sleep: m, hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value }, true);
+  queue({ bg_sleep: m, hue: $('hue').value, sat: $('sat').value, bg_bright: BG_BRIGHT }, true);
   sleepEnd = Date.now() + m * 60000;
   renderSleep();
 });
@@ -947,7 +949,7 @@ $('sleep_go').addEventListener('click', () => {
 // Cancel returns the backlight to the color and brightness from the sliders
 $('sleep_stop').addEventListener('click', () => {
   if (!sleepEnd) return;
-  queue({ bg_flow: 'off', hue: $('hue').value, sat: $('sat').value, bg_bright: $('bg_bright').value }, true);
+  queue({ bg_flow: 'off', hue: $('hue').value, sat: $('sat').value, bg_bright: BG_BRIGHT }, true);
   renderSleep();
 });
 
@@ -1007,21 +1009,20 @@ function loadScenes() {
 function applyScene(sc) {
   $('hue').value = sc.h;
   $('sat').value = sc.s;
-  $('bg_bright').value = sc.b;
   $('swing').value = sc.w;
   flowSec = sc.fs;
   flowMin = sc.fm;
   setEffect(sc.e);  // this also sets the time slider
-  ['hue', 'sat', 'bg_bright', 'swing'].forEach(updateLabel);
+  ['hue', 'sat', 'swing'].forEach(updateLabel);
   updateSwatch();
   setOn('bg_power', true);
-  queue(flowOn() ? flowParams() : { bg_power: 'on', hue: sc.h, sat: sc.s, bg_bright: sc.b }, true);
+  queue(flowOn() ? flowParams() : { bg_power: 'on', hue: sc.h, sat: sc.s, bg_bright: BG_BRIGHT }, true);
 }
 
 $('scene_save').addEventListener('click', () => {
   const name = $('scene_name').value.trim().slice(0, 20);
   if (!name) { sceneNote('enter a scene name'); return; }
-  const sc = { n: name, e: effect(), h: +$('hue').value, s: +$('sat').value, b: +$('bg_bright').value,
+  const sc = { n: name, e: effect(), h: +$('hue').value, s: +$('sat').value, b: BG_BRIGHT,
                fs: flowSec, fm: flowMin, w: +$('swing').value };
   const i = scenes.findIndex(x => x.n === name);
   if (i >= 0) scenes[i] = sc;  // the same name: replace
@@ -1032,7 +1033,8 @@ $('scene_save').addEventListener('click', () => {
   saveScenes();
 });
 
-['bright', 'ct', 'bg_bright', 'hue', 'sat', 'flow_s', 'swing', 'sleep_m'].forEach(updateLabel);
+['bright', 'ct', 'hue', 'sat', 'flow_s', 'swing', 'sleep_m'].forEach(updateLabel);
+loadVersion();
 loadScenes();
 renderApi();
 renderApiNow();
