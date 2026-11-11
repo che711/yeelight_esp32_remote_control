@@ -161,8 +161,8 @@ def test_all_off(lamp):
 
 def test_main_off_brings_backlight_back(lamp):
     """What the page sends to turn off only the main light while the backlight is on a plain color."""
-    assert set_ok({"power": "off", "bg_power": "on", "hue": 10, "sat": 100, "bg_bright": 50})["ok"]
-    assert lamp.methods() == ["set_power", "bg_set_scene", "get_prop"]
+    assert set_ok({"power": "off", "bg_power": "on", "bg_check": 0, "hue": 10, "sat": 100, "bg_bright": 100})["ok"]
+    assert lamp.methods() == ["set_power", "bg_set_scene"]  # no check command: bg_check=0
     assert lamp.state["main_power"] == "off"
     assert lamp.state["bg_power"] == "on"
 
@@ -190,6 +190,11 @@ def test_bg_on_uses_scene_then_checks(lamp):
     assert lamp.methods() == ["bg_set_scene", "get_prop"]
     assert lamp.commands[0].params == ["hsv", 120, 90, 60]
     assert lamp.state["bg_power"] == "on"
+
+
+def test_bg_check_can_be_skipped(lamp):
+    assert set_ok({"bg_power": "on", "bg_check": 0, "hue": 0, "sat": 100, "bg_bright": 100})["ok"]
+    assert lamp.methods() == ["bg_set_scene"]
 
 
 def test_bg_on_falls_back_to_toggle(lamp):
@@ -319,7 +324,16 @@ def test_pause_between_commands(lamp):
     times = [c.t for c in lamp.commands]
     assert len(times) == 5
     gaps = [b - a for a, b in zip(times, times[1:])]
-    assert min(gaps) >= 0.9, gaps
+    assert min(gaps) >= 0.25, gaps  # the board keeps 0.3 s between commands
+
+
+def test_one_request_with_several_commands_is_fast(lamp):
+    """Turning off the main light with the backlight on an effect: two commands, about a third of a second apart."""
+    import time
+    start = time.monotonic()
+    assert set_ok({"power": "off", "bg_flow": "neon", "flow_ms": 3000, "bg_bright": 100, "swing": 0})["ok"]
+    assert lamp.methods() == ["set_power", "bg_set_scene"]
+    assert time.monotonic() - start < 2.5
 
 
 def test_silent_lamp_stops_the_chain(lamp):
@@ -327,4 +341,3 @@ def test_silent_lamp_stops_the_chain(lamp):
     j = set_ok({"power": "on", "bright": 50, "ct": 4000})
     assert j["ok"] is False
     assert lamp.methods() == ["set_power"]  # the remaining commands are not tried
-    

@@ -78,6 +78,7 @@ Parameters can be combined with `&`.
 | `bright`, `ct` | main light brightness 1-100, temperature 2700-6500 K |
 | `bg_power` | `on`, `off`: the backlight |
 | `hue`, `sat`, `bg_bright` | color 0-359, saturation 0-100, backlight brightness 1-100 (the page always sends 100) |
+| `bg_check` | `0` with `bg_power=on`: skip the check that the backlight really turned on (saves a command) |
 | `bg_flow` | `on` (rainbow), `warm`, `cold`, `neon`, `pastel`, `wave`, `fire`, `candle`, `sunset`, `sunrise`, `storm`, `ocean`, `lava`, `heart`, `garland`, `police`, `off` |
 | `flow_ms` | time of one step in milliseconds; for `sunset` and `sunrise` the total duration |
 | `swing` | brightness swing of color cycling, 0-90 |
@@ -100,7 +101,7 @@ Parameters can be combined with `&`.
 
 The remote is built the way it is because of these:
 
-- The lamp accepts about 60 commands per minute, otherwise it goes silent. The board keeps at least a second between commands, and the page sends slider commands no more than once per 1.2 s.
+- The lamp accepts about 60 commands per minute, otherwise it goes silent. The board keeps at least 0.3 s between commands and sends no more than 50 commands in any 60 seconds (if the limit is reached it waits for up to 10 seconds, then skips the command). The page sends slider commands no more than once per 1.2 s.
 - The `bg_set_power on` command replies "ok" but does not turn the backlight on. So the backlight is turned on with a `bg_set_scene` scene; then the board checks `bg_power` and, if needed, switches it with `bg_toggle`.
 - There is no command to turn off only the main light: `set_power` and `toggle` act on both lights. So the page turns both lights off and, in the same request, sets the backlight again. The backlight blinks for a moment, a running effect starts over and a sleep timer is restarted with the time left. The API still has `main=dim`, which dims the main light to 1%.
 - The `power` property means "the main light or the backlight is on". The state of the main light is reported by `main_power`.
@@ -166,4 +167,4 @@ The version is the `FW_VERSION` define at the top of `src/main.cpp` (format `x.y
 - There is no password on the page or the API.
 - After the board reboots, a running effect is shown on the page as "Rainbow": the lamp does not say which effect is running.
 - Sunset turns the backlight off at the end, sunrise stays on the last color. The sleep timer fades in the color set on the sliders.
-- Not verified on a real lamp: long effect chains (campfire, storm, garland, police, lava, ocean), long sunset and sunrise durations (up to 30 minutes), the sleep timer up to 120 minutes, the `/api/scene` reply, and the `bg_flowing`, `bg_rgb` and `main_power` properties in `get_prop`. If the lamp replies with anything other than "ok", send the lines from the serial monitor: the command (`->`) and the reply (`<-`).
+- Not verified on a real lamp: long effect chains (campfire, storm, garland, police, lava, ocean), long sunset and sunrise durations (up to 30 minutes), the sleep timer up to 120 minutes, the `/api/scene` reply, and the `bg_flowing`, `bg_rgb` and `main_power` properties in `get_prop`. If the lamp replies with anything other than "ok", send the lines from the serial monitor: the command (`->`) and the reply (`<-`). Every line carries the board's uptime in milliseconds, and the command line also shows how long it waited for its turn (`waited`), so you can see where the time goes.

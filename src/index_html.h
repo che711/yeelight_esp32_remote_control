@@ -618,7 +618,7 @@ function backlightParams() {
   const color = { hue: $('hue').value, sat: $('sat').value, bg_bright: BG_BRIGHT };
   const left = sleepEnd ? Math.round((sleepEnd - Date.now()) / 1000) : 0;
   if (left > 0) return Object.assign({ bg_sleep: Math.max(1, Math.ceil(left / 60)) }, color);
-  return flowOn() ? flowParams() : Object.assign({ bg_power: 'on' }, color);
+  return flowOn() ? flowParams() : Object.assign({ bg_power: 'on', bg_check: 0 }, color);  // bg_check=0: skip the check, it saves a command
 }
 
 $('power').addEventListener('click', () => {
@@ -762,6 +762,7 @@ const API_PARAMS = [
   ['bright=1..100, ct=2700..6500', 'main light brightness and color temperature'],
   ['bg_power=on|off', 'turn the backlight on or off; the color can be set at the same time'],
   ['hue=0..359, sat=0..100, bg_bright=1..100', 'backlight color, saturation and brightness'],
+  ['bg_check=0', 'with bg_power=on: skip the check that the backlight really turned on (saves a command)'],
   ['bg_flow=<effect>|off', Object.values(EFFECTS).map(e => e.board === 'on' ? 'on (rainbow)' : e.board).join(', ')],
   ['flow_ms', 'time of one step in milliseconds; for ' + boardNames(TIMED_EFFECTS) + ' the total duration'],
   ['swing=0..90', 'brightness swing of color cycling (' + boardNames(PALETTE_EFFECTS) + ')'],
