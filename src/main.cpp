@@ -35,13 +35,35 @@ uint8_t busyPct = 0;
 
 // ---------- Talking to the lamp ----------
 
+// Pacing of the commands. The lamp accepts about 60 commands per minute and goes silent for a minute or more
+// if it gets more. We keep a short pause between commands and at most 50 commands in any 60 seconds
+// (a margin below the lamp's limit).
+const uint32_t CMD_MIN_GAP_MS = 300;
+const int CMD_MAX_PER_MIN = 50;
+const uint32_t CMD_WAIT_LIMIT_MS = 10000;  // do not block the server longer than this while waiting for a free slot
+
 // Sends one command to the lamp and returns the first line of the reply
 String sendCmd(const String &method, const String &params) {
-  // The lamp accepts about 60 commands per minute, otherwise it goes silent for a minute or more.
-  // Keep at least 1 second between commands.
   static uint32_t lastCmd = 0;
-  while (lastCmd != 0 && millis() - lastCmd < 1000) delay(20);
-  lastCmd = millis();
+  static uint32_t times[CMD_MAX_PER_MIN] = {0};  // when the last commands were sent (0 = not used yet)
+  static int pos = 0;                            // the slot of the oldest of them
+  uint32_t waitStart = millis();
+  while (true) {
+    uint32_t now = millis();
+    bool gapOk = lastCmd == 0 || now - lastCmd >= CMD_MIN_GAP_MS;
+    bool rateOk = times[pos] == 0 || now - times[pos] >= 60000;
+    if (gapOk && rateOk) break;
+    if (now - waitStart > CMD_WAIT_LIMIT_MS) {
+      Serial.println("lamp: command limit reached, the command was skipped");
+      return "";
+    }
+    delay(10);
+  }
+  uint32_t sentAt = millis();
+  uint32_t waited = sentAt - waitStart;
+  lastCmd = sentAt;
+  times[pos] = sentAt;
+  pos = (pos + 1) % CMD_MAX_PER_MIN;
 
   WiFiClient c;
   if (!c.connect(LAMP_IP, LAMP_PORT, 2000)) {
@@ -73,7 +95,9 @@ String sendCmd(const String &method, const String &params) {
     if (!got) delay(5);
   }
   c.stop();
-  Serial.printf("-> %s\n<- %s\n", json.c_str(), reply.c_str());
+  // Times are board uptime in ms: "waited" is how long the command waited for its turn, the second time is the reply
+  Serial.printf("[%lu ms] -> %s  (waited %lu ms)\n[%lu ms] <- %s\n",
+                (unsigned long)sentAt, json.c_str(), (unsigned long)waited, (unsigned long)millis(), reply.c_str());
   if (reply.length() == 0) {
     Serial.println("lamp: connected but no reply (maybe the command limit, wait a minute)");
   }
@@ -403,8 +427,9 @@ bool applySet() {
       int br  = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;
       run("bg_set_scene", "[\"hsv\"," + String(hue) + "," + String(sat) + "," + String(br) + "]");
       bgDone = true;
-      // Check that the backlight really turned on; if not, switch it with bg_toggle
-      if (!lampSilent) {
+      // Check that the backlight really turned on; if not, switch it with bg_toggle.
+      // bg_check=0 skips the check (the page uses it when it brings the backlight back after turning off the main light).
+      if (!lampSilent && getA("bg_check") != "0") {
         String v[1];
         String st = sendCmd("get_prop", "[\"bg_power\"]");
         if (st.length() == 0) lampSilent = true;
@@ -479,7 +504,7 @@ bool applySet() {
       bgFlowSwing = swing;
     } else if (hasA("hue")) {
       // Leave the effect straight into the wanted color: one scene instead of "stop" + "set color".
-      // The color changes a second sooner: the lamp cannot take commands more often than once a second.
+      // This saves one command, and every command costs time and a share of the lamp's command limit.
       int hue = constrain(getA("hue").toInt(), 0, 359);
       int sat = hasA("sat") ? constrain(getA("sat").toInt(), 0, 100) : 100;
       int br  = hasA("bg_bright") ? constrain(getA("bg_bright").toInt(), 1, 100) : 100;

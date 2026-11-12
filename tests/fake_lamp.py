@@ -3,7 +3,7 @@
 It listens on a TCP port (55443 by default), replies the way the lamp does, records every command
 and watches the lamp's rules:
   - one command per connection;
-  - at least one second between commands (with a small margin for the network);
+  - a pause between commands (the board keeps 0.3 s; the check allows a small margin for the network);
   - no more than 60 commands per minute;
   - color flow (cf) chains are well formed: four numbers per step, mode 1, brightness 1..100, color 0..0xFFFFFF.
 Violations are collected in the violations list.
@@ -16,7 +16,7 @@ import socketserver
 import threading
 import time
 
-MIN_GAP_S = 0.9        # the board waits 1 s; the other 0.1 s is for network delays
+MIN_GAP_S = 0.25       # the board waits 0.3 s; the other 0.05 s is for network delays
 RATE_LIMIT = 60        # commands per minute
 RATE_WINDOW_S = 59.0   # slightly less than a minute, to avoid false alarms
 
@@ -162,7 +162,7 @@ class FakeLamp:
 
     def _check_rules(self, now, method, params):
         if self._last_t is not None and now - self._last_t < MIN_GAP_S:
-            self.violations.append("%.2f s pause before %s (at least 1 s is required)" % (now - self._last_t, method))
+            self.violations.append("%.2f s pause before %s (the board must keep at least 0.3 s)" % (now - self._last_t, method))
         self._last_t = now
         self._times.append(now)
         if len(self._times) > RATE_LIMIT:
@@ -232,4 +232,3 @@ if __name__ == "__main__":
                 print("!! VIOLATION:", v)
     except KeyboardInterrupt:
         lamp.stop()
-        
